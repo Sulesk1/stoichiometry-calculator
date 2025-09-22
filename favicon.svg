@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100">
+  <defs>
+    <linearGradient id="bg-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#3b82f6;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#1e40af;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Background circle -->
+  <circle cx="50" cy="50" r="45" fill="url(#bg-gradient)" stroke="#1d4ed8" stroke-width="2"/>
+  
+  <!-- Chemical formula style text -->
+  <text x="50" y="40" text-anchor="middle" fill="white" font-size="24" font-weight="bold" font-family="serif">S</text>
+  <text x="50" y="65" text-anchor="middle" fill="white" font-size="12" font-weight="normal" font-family="serif">calc</text>
+  
+  <!-- Decorative atoms/molecules -->
+  <circle cx="25" cy="25" r="3" fill="white" opacity="0.8"/>
+  <circle cx="75" cy="25" r="3" fill="white" opacity="0.8"/>
+  <circle cx="25" cy="75" r="3" fill="white" opacity="0.8"/>
+  <circle cx="75" cy="75" r="3" fill="white" opacity="0.8"/>
+  
+  <!-- Chemical bond lines -->
+  <line x1="25" y1="25" x2="35" y2="35" stroke="white" stroke-width="1" opacity="0.6"/>
+  <line x1="75" y1="25" x2="65" y2="35" stroke="white" stroke-width="1" opacity="0.6"/>
+  <line x1="25" y1="75" x2="35" y2="65" stroke="white" stroke-width="1" opacity="0.6"/>
+  <line x1="75" y1="75" x2="65" y2="65" stroke="white" stroke-width="1" opacity="0.6"/>
+</svg>

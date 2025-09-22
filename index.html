@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Free Stoichiometry Calculator - Balance Chemical Equations & Calculate Yields</title>
+    <meta name="description" content="Free online stoichiometry calculator. Balance chemical equations, calculate molar ratios, limiting reagents, and theoretical yields instantly.">
+    <meta name="keywords" content="stoichiometry calculator, balance chemical equations, limiting reagent calculator, theoretical yield calculator, mole ratio">
+    <meta name="author" content="Stoichiometry Calculator">
+    
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://stoichiometrycalculator.com/">
+    <meta property="og:title" content="Free Stoichiometry Calculator - Balance Chemical Equations">
+    <meta property="og:description" content="Free online stoichiometry calculator. Balance chemical equations, calculate molar ratios, limiting reagents, and theoretical yields instantly.">
+    
+    <!-- Twitter -->
+    <meta property="twitter:card" content="summary_large_image">
+    <meta property="twitter:url" content="https://stoichiometrycalculator.com/">
+    <meta property="twitter:title" content="Free Stoichiometry Calculator - Balance Chemical Equations">
+    <meta property="twitter:description" content="Free online stoichiometry calculator. Balance chemical equations, calculate molar ratios, limiting reagents, and theoretical yields instantly.">
+    
+    <link rel="icon" type="image/svg+xml" href="favicon.svg">
+    <link rel="stylesheet" href="styles.css">
+    
+    <!-- Google Analytics (GA4) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=GA_MEASUREMENT_ID"></script>
+    <script>
+        window.dataLayer = window.dataLayer || [];
+        function gtag(){dataLayer.push(arguments);}
+        gtag('js', new Date());
+        gtag('config', 'GA_MEASUREMENT_ID');
+    </script>
+    
+    <!-- Structured Data for FAQ -->
+    <script type="application/ld+json">
+    {
+        "@context": "https://schema.org",
+        "@type": "FAQPage",
+        "mainEntity": [
+            {
+                "@type": "Question",
+                "name": "What is stoichiometry?",
+                "acceptedAnswer": {
+                    "@type": "Answer",
+                    "text": "Stoichiometry is the calculation of quantities in chemical reactions based on the balanced chemical equation. It allows you to determine how much of each reactant is needed and how much product will be formed."
+                }
+            },
+            {
+                "@type": "Question",
+                "name": "How do you balance chemical equations?",
+                "acceptedAnswer": {
+                    "@type": "Answer",
+                    "text": "To balance chemical equations, adjust the coefficients (numbers in front of formulas) so that the number of atoms of each element is equal on both sides of the equation. Start with the most complex molecule and work systematically through each element."
+                }
+            },
+            {
+                "@type": "Question",
+                "name": "What is a limiting reagent?",
+                "acceptedAnswer": {
+                    "@type": "Answer",
+                    "text": "A limiting reagent is the reactant that is completely consumed first in a chemical reaction, thus limiting the amount of product that can be formed. It determines the theoretical yield of the reaction."
+                }
+            },
+            {
+                "@type": "Question",
+                "name": "How do you calculate theoretical yield?",
+                "acceptedAnswer": {
+                    "@type": "Answer",
+                    "text": "Theoretical yield is calculated by determining the limiting reagent, then using stoichiometry to calculate the maximum amount of product that could be formed based on the balanced equation and the amount of limiting reagent available."
+                }
+            }
+        ]
+    }
+    </script>
+</head>
+<body>
+    <header>
+        <div class="container">
+            <div class="logo-section">
+                <svg class="logo" viewBox="0 0 50 50" width="40" height="40">
+                    <circle cx="25" cy="25" r="20" fill="#2563eb" stroke="#1d4ed8" stroke-width="2"/>
+                    <text x="25" y="30" text-anchor="middle" fill="white" font-size="16" font-weight="bold">Sc</text>
+                </svg>
+                <h1>Stoichiometry Calculator</h1>
+            </div>
+            <nav>
+                <a href="#calculator">Calculator</a>
+                <a href="#guide">Guide</a>
+                <a href="#faq">FAQ</a>
+            </nav>
+        </div>
+    </header>
+
+    <main>
+        <section id="calculator" class="calculator-section">
+            <div class="container">
+                <h2>Chemical Equation Calculator</h2>
+                <p class="subtitle">Enter a chemical equation to balance it and perform stoichiometry calculations</p>
+                
+                <div class="calculator-form">
+                    <div class="input-group">
+                        <label for="equation-input">Chemical Equation:</label>
+                        <input type="text" id="equation-input" placeholder="e.g., H2 + O2 → H2O" aria-describedby="equation-help">
+                        <small id="equation-help">Enter reactants and products separated by → or =</small>
+                    </div>
+                    
+                    <button id="balance-btn" class="primary-btn">Balance Equation</button>
+                    
+                    <div id="balanced-result" class="result-section" style="display: none;">
+                        <h3>Balanced Equation:</h3>
+                        <div id="balanced-equation" class="equation-display"></div>
+                    </div>
+                    
+                    <div id="stoichiometry-inputs" class="stoich-section" style="display: none;">
+                        <h3>Stoichiometry Calculations</h3>
+                        <p>Enter the mass (grams) of known reactants:</p>
+                        <div id="reactant-inputs"></div>
+                        <button id="calculate-btn" class="primary-btn">Calculate</button>
+                    </div>
+                    
+                    <div id="calculations-result" class="result-section" style="display: none;">
+                        <h3>Results:</h3>
+                        <div class="results-grid">
+                            <div class="result-item">
+                                <h4>Mole Ratios:</h4>
+                                <div id="mole-ratios"></div>
+                            </div>
+                            <div class="result-item">
+                                <h4>Limiting Reagent:</h4>
+                                <div id="limiting-reagent"></div>
+                            </div>
+                            <div class="result-item">
+                                <h4>Theoretical Yield:</h4>
+                                <div id="theoretical-yield"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="guide" class="guide-section">
+            <div class="container">
+                <h2>What is Stoichiometry?</h2>
+                <article>
+                    <p>Stoichiometry is the branch of chemistry that deals with the quantitative relationships between reactants and products in chemical reactions. It's based on the law of conservation of mass and allows chemists to predict how much product will form or how much reactant is needed.</p>
+                    
+                    <h3>Key Concepts:</h3>
+                    <ul>
+                        <li><strong>Balanced Chemical Equations:</strong> Show the exact number of atoms of each element on both sides</li>
+                        <li><strong>Mole Ratios:</strong> Derived from coefficients in balanced equations</li>
+                        <li><strong>Limiting Reagent:</strong> The reactant that runs out first, limiting product formation</li>
+                        <li><strong>Theoretical Yield:</strong> Maximum amount of product possible from given reactants</li>
+                    </ul>
+                    
+                    <h3>Example Calculation:</h3>
+                    <div class="example-box">
+                        <p><strong>Problem:</strong> How many grams of water can be produced from 10g of hydrogen and 80g of oxygen?</p>
+                        <p><strong>Balanced equation:</strong> 2H₂ + O₂ → 2H₂O</p>
+                        <ol>
+                            <li>Convert masses to moles: H₂ = 10g ÷ 2g/mol = 5 mol; O₂ = 80g ÷ 32g/mol = 2.5 mol</li>
+                            <li>Determine limiting reagent: Need 2:1 ratio. Have 5:2.5 = 2:1 ratio (neither limiting)</li>
+                            <li>Calculate product: 5 mol H₂ × (2 mol H₂O / 2 mol H₂) × 18g/mol = 90g H₂O</li>
+                        </ol>
+                    </div>
+                </article>
+            </div>
+        </section>
+
+        <section id="faq" class="faq-section">
+            <div class="container">
+                <h2>Frequently Asked Questions</h2>
+                
+                <div class="faq-item">
+                    <button class="faq-question" aria-expanded="false">
+                        <span>What is stoichiometry?</span>
+                        <span class="faq-icon">+</span>
+                    </button>
+                    <div class="faq-answer">
+                        <p>Stoichiometry is the calculation of quantities in chemical reactions based on the balanced chemical equation. It allows you to determine how much of each reactant is needed and how much product will be formed. The word comes from Greek: "stoicheion" (element) and "metron" (measure).</p>
+                    </div>
+                </div>
+                
+                <div class="faq-item">
+                    <button class="faq-question" aria-expanded="false">
+                        <span>How do you balance chemical equations?</span>
+                        <span class="faq-icon">+</span>
+                    </button>
+                    <div class="faq-answer">
+                        <p>To balance chemical equations, adjust the coefficients (numbers in front of formulas) so that the number of atoms of each element is equal on both sides of the equation. Start with the most complex molecule and work systematically through each element. Never change the chemical formulas themselves, only the coefficients.</p>
+                    </div>
+                </div>
+                
+                <div class="faq-item">
+                    <button class="faq-question" aria-expanded="false">
+                        <span>What is a limiting reagent?</span>
+                        <span class="faq-icon">+</span>
+                    </button>
+                    <div class="faq-answer">
+                        <p>A limiting reagent (or limiting reactant) is the reactant that is completely consumed first in a chemical reaction, thus limiting the amount of product that can be formed. It determines the theoretical yield of the reaction. The other reactants are present in excess.</p>
+                    </div>
+                </div>
+                
+                <div class="faq-item">
+                    <button class="faq-question" aria-expanded="false">
+                        <span>How do you calculate theoretical yield?</span>
+                        <span class="faq-icon">+</span>
+                    </button>
+                    <div class="faq-answer">
+                        <p>Theoretical yield is calculated by: 1) Determining the limiting reagent, 2) Using stoichiometry to calculate the maximum amount of product that could be formed based on the balanced equation and the amount of limiting reagent available. This assumes 100% efficiency and no side reactions.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-section">
+                    <h3>Related Calculators</h3>
+                    <ul>
+                        <li><a href="https://molecularweightcalculator.com" target="_blank" rel="noopener">Molecular Weight Calculator</a></li>
+                        <li><a href="#" rel="noopener">Molarity Calculator</a></li>
+                        <li><a href="#" rel="noopener">pH Calculator</a></li>
+                    </ul>
+                </div>
+                <div class="footer-section">
+                    <h3>Resources</h3>
+                    <ul>
+                        <li><a href="#guide">Stoichiometry Guide</a></li>
+                        <li><a href="#faq">FAQ</a></li>
+                        <li><a href="#calculator">Calculator</a></li>
+                    </ul>
+                </div>
+                <div class="footer-section">
+                    <p>&copy; 2025 Stoichiometry Calculator. All rights reserved.</p>
+                    <p>Free chemistry tools for students and professionals.</p>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <script src="app.js"></script>
+</body>
+</html>
