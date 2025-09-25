@@ -422,7 +422,17 @@
     </footer>
 
     <!-- Scripts -->
-    <script type="module" src="app.js"></script>
+    <!-- Load chemistry modules first -->
+    <script src="chem/fractions.js"></script>
+    <script src="chem/lexer.js"></script>
+    <script src="chem/parser.js"></script>
+    <script src="chem/linear.js"></script>
+    <script src="chem/balancer.js"></script>
+    <script src="chem/redox.js"></script>
+    <script src="chem/mass.js"></script>
+    
+    <!-- Load main app -->
+    <script src="app.js"></script>
     
     <!-- Analytics Hook (Optional) -->
     <script>
@@ -439,7 +449,5 @@
             }
         };
     </script>
-
-    <script src="app.js"></script>
 </body>
 </html>
