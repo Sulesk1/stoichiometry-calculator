@@ -3,29 +3,427 @@
  * Handles UI interactions, calculator integration, and user experience
  */
 
-// Simple inline chemistry functions for immediate functionality
-function parseSimpleEquation(equation) {
-    // Basic equation parser for common reactions
-    const parts = equation.split(/[=→]/);
-    if (parts.length !== 2) return null;
+// Fraction class for exact arithmetic
+class Fraction {
+    constructor(num, den = 1) {
+        if (den === 0) throw new Error('Division by zero');
+        
+        // Handle negative denominators
+        if (den < 0) {
+            num = -num;
+            den = -den;
+        }
+        
+        // Reduce to lowest terms
+        const g = this.gcd(Math.abs(num), Math.abs(den));
+        this.num = num / g;
+        this.den = den / g;
+    }
     
-    const reactants = parts[0].trim().split('+').map(s => s.trim()).filter(s => s);
-    const products = parts[1].trim().split('+').map(s => s.trim()).filter(s => s);
+    gcd(a, b) {
+        return b === 0 ? a : this.gcd(b, a % b);
+    }
+    
+    add(other) {
+        return new Fraction(
+            this.num * other.den + other.num * this.den,
+            this.den * other.den
+        );
+    }
+    
+    subtract(other) {
+        return new Fraction(
+            this.num * other.den - other.num * this.den,
+            this.den * other.den
+        );
+    }
+    
+    multiply(other) {
+        return new Fraction(this.num * other.num, this.den * other.den);
+    }
+    
+    divide(other) {
+        return new Fraction(this.num * other.den, this.den * other.num);
+    }
+    
+    isZero() {
+        return this.num === 0;
+    }
+    
+    isNegative() {
+        return this.num < 0;
+    }
+    
+    abs() {
+        return new Fraction(Math.abs(this.num), this.den);
+    }
+    
+    toNumber() {
+        return this.num / this.den;
+    }
+    
+    toString() {
+        return this.den === 1 ? this.num.toString() : `${this.num}/${this.den}`;
+    }
+}
+
+// Parse chemical formula with proper element extraction
+function parseChemicalFormula(formula) {
+    // Extract coefficient
+    const match = formula.match(/^(\d*)\s*(.+)$/);
+    const coefficient = match[1] ? parseInt(match[1]) : 1;
+    const compound = match[2];
+    
+    const composition = {};
+    let charge = 0;
+    
+    // Parse compound recursively
+    let index = 0;
+    
+    function parseGroup() {
+        const elements = {};
+        
+        while (index < compound.length) {
+            const char = compound[index];
+            
+            if (char === '(') {
+                index++; // skip '('
+                const groupElements = parseGroup();
+                if (compound[index] === ')') {
+                    index++; // skip ')'
+                    const multiplier = parseNumber() || 1;
+                    
+                    for (const [element, count] of Object.entries(groupElements)) {
+                        elements[element] = (elements[element] || 0) + count * multiplier;
+                    }
+                }
+            } else if (char === ')') {
+                break;
+            } else if (char >= 'A' && char <= 'Z') {
+                const element = parseElement();
+                const count = parseNumber() || 1;
+                elements[element] = (elements[element] || 0) + count;
+            } else if (char === '+' || char === '-') {
+                // Handle charges
+                const sign = char === '+' ? 1 : -1;
+                index++;
+                const chargeNum = parseNumber() || 1;
+                charge += sign * chargeNum;
+            } else {
+                index++;
+            }
+        }
+        
+        return elements;
+    }
+    
+    function parseElement() {
+        let element = compound[index++];
+        while (index < compound.length && compound[index] >= 'a' && compound[index] <= 'z') {
+            element += compound[index++];
+        }
+        return element;
+    }
+    
+    function parseNumber() {
+        let numStr = '';
+        while (index < compound.length && compound[index] >= '0' && compound[index] <= '9') {
+            numStr += compound[index++];
+        }
+        return numStr ? parseInt(numStr) : null;
+    }
+    
+    const parsed = parseGroup();
+    
+    return {
+        formula: compound,
+        originalFormula: formula,
+        coefficient: coefficient,
+        composition: parsed,
+        charge: charge
+    };
+}
+
+// Parse equation into reactants and products
+function parseChemicalEquation(equation) {
+    const [left, right] = equation.split(/[=→]/);
+    if (!left || !right) return null;
+    
+    const reactants = left.split('+').map(s => parseChemicalFormula(s.trim())).filter(r => r);
+    const products = right.split('+').map(s => parseChemicalFormula(s.trim())).filter(p => p);
     
     return { reactants, products };
 }
 
-function balanceSimpleEquation(reactants, products) {
-    // Simple examples for demonstration
-    const examples = {
-        'H2+O2->H2O': '2H2 + O2 → 2H2O',
-        'CH4+O2->CO2+H2O': 'CH4 + 2O2 → CO2 + 2H2O',
-        'Fe+HCl->FeCl2+H2': 'Fe + 2HCl → FeCl2 + H2',
-        'C2H6+O2->CO2+H2O': '2C2H6 + 7O2 → 4CO2 + 6H2O'
-    };
+// Build matrix A for balancing
+function buildBalanceMatrix(reactants, products, includeCharge = false) {
+    const allCompounds = [...reactants, ...products];
+    const elements = new Set();
+    let hasCharge = false;
     
-    const key = (reactants.join('+') + '->' + products.join('+')).replace(/\s/g, '');
-    return examples[key] || null;
+    // Collect all elements and check for charges
+    allCompounds.forEach(compound => {
+        Object.keys(compound.composition).forEach(element => elements.add(element));
+        if (compound.charge !== 0) hasCharge = true;
+    });
+    
+    const elementList = Array.from(elements);
+    const numRows = elementList.length + (includeCharge || hasCharge ? 1 : 0);
+    const numCols = allCompounds.length;
+    
+    // Build matrix A where A*x = 0
+    const matrix = [];
+    
+    // Element balance rows
+    elementList.forEach(element => {
+        const row = [];
+        
+        // Reactants (negative coefficients)
+        reactants.forEach(compound => {
+            const count = compound.composition[element] || 0;
+            row.push(new Fraction(-count));
+        });
+        
+        // Products (positive coefficients)  
+        products.forEach(compound => {
+            const count = compound.composition[element] || 0;
+            row.push(new Fraction(count));
+        });
+        
+        matrix.push(row);
+    });
+    
+    // Charge balance row (if needed)
+    if (includeCharge || hasCharge) {
+        const row = [];
+        
+        reactants.forEach(compound => {
+            row.push(new Fraction(-compound.charge));
+        });
+        
+        products.forEach(compound => {
+            row.push(new Fraction(compound.charge));
+        });
+        
+        matrix.push(row);
+    }
+    
+    return { matrix, elements: elementList, compounds: allCompounds };
+}
+
+// Compute rational nullspace using Gaussian elimination
+function computeNullspace(matrix) {
+    const rows = matrix.length;
+    const cols = matrix[0].length;
+    
+    // Create augmented matrix for row reduction
+    const augmented = matrix.map(row => [...row]);
+    
+    // Gaussian elimination to reduced row echelon form
+    let pivot = 0;
+    const pivotCols = [];
+    
+    for (let col = 0; col < cols && pivot < rows; col++) {
+        // Find pivot row
+        let maxRow = pivot;
+        for (let row = pivot + 1; row < rows; row++) {
+            if (augmented[row][col].abs().toNumber() > augmented[maxRow][col].abs().toNumber()) {
+                maxRow = row;
+            }
+        }
+        
+        // Skip if column is zero
+        if (augmented[maxRow][col].isZero()) continue;
+        
+        // Swap rows
+        if (maxRow !== pivot) {
+            [augmented[pivot], augmented[maxRow]] = [augmented[maxRow], augmented[pivot]];
+        }
+        
+        pivotCols.push(col);
+        
+        // Make pivot = 1
+        const pivotVal = augmented[pivot][col];
+        for (let j = 0; j < cols; j++) {
+            augmented[pivot][j] = augmented[pivot][j].divide(pivotVal);
+        }
+        
+        // Eliminate column
+        for (let row = 0; row < rows; row++) {
+            if (row !== pivot && !augmented[row][col].isZero()) {
+                const factor = augmented[row][col];
+                for (let j = 0; j < cols; j++) {
+                    augmented[row][j] = augmented[row][j].subtract(augmented[pivot][j].multiply(factor));
+                }
+            }
+        }
+        
+        pivot++;
+    }
+    
+    // Find free variables (non-pivot columns)
+    const freeVars = [];
+    for (let col = 0; col < cols; col++) {
+        if (!pivotCols.includes(col)) {
+            freeVars.push(col);
+        }
+    }
+    
+    if (freeVars.length === 0) {
+        return null; // No non-trivial solution
+    }
+    
+    // Generate basis vectors for nullspace
+    const nullspaceBasis = [];
+    
+    freeVars.forEach(freeCol => {
+        const solution = new Array(cols).fill(null).map(() => new Fraction(0));
+        solution[freeCol] = new Fraction(1);
+        
+        // Back-substitute to find values of pivot variables
+        for (let i = pivotCols.length - 1; i >= 0; i--) {
+            const pivotCol = pivotCols[i];
+            let sum = new Fraction(0);
+            
+            for (let j = pivotCol + 1; j < cols; j++) {
+                sum = sum.add(augmented[i][j].multiply(solution[j]));
+            }
+            
+            solution[pivotCol] = sum.multiply(new Fraction(-1));
+        }
+        
+        nullspaceBasis.push(solution);
+    });
+    
+    return nullspaceBasis;
+}
+
+// Convert fractions to integers and find best solution
+function findBestIntegerSolution(nullspaceBasis, numReactants) {
+    if (!nullspaceBasis || nullspaceBasis.length === 0) return null;
+    
+    let bestSolution = null;
+    let bestScore = Infinity;
+    
+    // Try each basis vector
+    nullspaceBasis.forEach(basis => {
+        // Ensure at least one product has positive coefficient
+        let hasPositiveProduct = false;
+        for (let i = numReactants; i < basis.length; i++) {
+            if (basis[i].toNumber() > 0) {
+                hasPositiveProduct = true;
+                break;
+            }
+        }
+        
+        if (!hasPositiveProduct) {
+            // Negate the solution
+            basis = basis.map(f => f.multiply(new Fraction(-1)));
+        }
+        
+        // Convert to integers
+        const integers = convertToIntegers(basis);
+        if (integers) {
+            const maxCoeff = Math.max(...integers);
+            const sumCoeff = integers.reduce((a, b) => a + b, 0);
+            const score = maxCoeff * 1000 + sumCoeff; // Prefer smaller max, then smaller sum
+            
+            if (score < bestScore) {
+                bestScore = score;
+                bestSolution = integers;
+            }
+        }
+    });
+    
+    return bestSolution;
+}
+
+// Convert fraction vector to positive integers
+function convertToIntegers(fractions) {
+    // Find LCM of all denominators
+    let lcm = 1;
+    fractions.forEach(f => {
+        if (!f.isZero()) {
+            lcm = lcmTwo(lcm, f.den);
+        }
+    });
+    
+    // Scale to integers
+    const integers = fractions.map(f => Math.round(f.multiply(new Fraction(lcm)).toNumber()));
+    
+    // Make all positive
+    const minVal = Math.min(...integers);
+    if (minVal < 0) {
+        for (let i = 0; i < integers.length; i++) {
+            integers[i] = -integers[i];
+        }
+    }
+    
+    // Reduce by GCD
+    const gcdVal = integers.reduce((g, val) => val === 0 ? g : gcdTwo(g, Math.abs(val)), 0);
+    if (gcdVal > 1) {
+        for (let i = 0; i < integers.length; i++) {
+            integers[i] = integers[i] / gcdVal;
+        }
+    }
+    
+    return integers;
+}
+
+function gcdTwo(a, b) {
+    return b === 0 ? a : gcdTwo(b, a % b);
+}
+
+function lcmTwo(a, b) {
+    return Math.abs(a * b) / gcdTwo(a, b);
+}
+
+// Main balancing function
+function balanceChemicalEquation(equation, isRedox = false) {
+    try {
+        const parsed = parseChemicalEquation(equation);
+        if (!parsed) {
+            return { success: false, error: 'Invalid equation format. Use = or → to separate reactants and products.' };
+        }
+        
+        const { reactants, products } = parsed;
+        const { matrix, elements, compounds } = buildBalanceMatrix(reactants, products, isRedox);
+        
+        const nullspace = computeNullspace(matrix);
+        if (!nullspace) {
+            return { success: false, error: 'No solution exists. Check if the equation is chemically valid.' };
+        }
+        
+        const coefficients = findBestIntegerSolution(nullspace, reactants.length);
+        if (!coefficients) {
+            return { success: false, error: 'Could not find integer solution.' };
+        }
+        
+        // Format result
+        const reactantStrs = reactants.map((compound, i) => {
+            const coeff = coefficients[i];
+            return (coeff > 1 ? coeff : '') + compound.formula;
+        });
+        
+        const productStrs = products.map((compound, i) => {
+            const coeff = coefficients[reactants.length + i];
+            return (coeff > 1 ? coeff : '') + compound.formula;
+        });
+        
+        const balanced = reactantStrs.join(' + ') + ' → ' + productStrs.join(' + ');
+        
+        return {
+            success: true,
+            balanced: balanced,
+            coefficients: coefficients,
+            reactants: reactants,
+            products: products,
+            original: equation
+        };
+        
+    } catch (error) {
+        return { success: false, error: `Balancing error: ${error.message}` };
+    }
 }
 
 /**
@@ -360,38 +758,26 @@ class StoichiometryCalculator {
     }
 
     /**
-     * Balance chemical equation
+     * Balance chemical equation using matrix nullspace method
      * @param {string} equation
      * @returns {Promise<Object>}
      */
     async balanceEquation(equation) {
         try {
-            // Parse equation
-            const parsed = parseSimpleEquation(equation);
-            if (!parsed) {
-                return { success: false, error: 'Invalid equation format. Use = or → to separate reactants and products.' };
-            }
-
-            // Try to balance with simple examples
-            const balanced = balanceSimpleEquation(parsed.reactants, parsed.products);
+            const isRedox = this.currentMode === 'redox';
+            const result = balanceChemicalEquation(equation, isRedox);
             
-            if (balanced) {
-                return {
-                    success: true,
-                    original: equation,
-                    balanced: balanced,
-                    reactants: parsed.reactants,
-                    products: parsed.products
-                };
-            } else {
-                // Provide a helpful response for unsupported equations
-                return { 
-                    success: false, 
-                    error: 'This equation is not in our simple examples database. Try: H2 + O2 = H2O, CH4 + O2 = CO2 + H2O, or Fe + HCl = FeCl2 + H2' 
-                };
+            if (result.success) {
+                // Add coefficient information for display
+                result.coefficients = result.coefficients.map(c => ({ 
+                    toNumber: () => c,
+                    toString: () => c.toString()
+                }));
             }
+            
+            return result;
         } catch (error) {
-            return { success: false, error: error.message };
+            return { success: false, error: `Unexpected error: ${error.message}` };
         }
     }
 
