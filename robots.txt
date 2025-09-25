@@ -1,5 +1,26 @@
 User-agent: *
 Allow: /
+Allow: /tests/
+
+# Main pages
+Allow: /index.html
+Allow: /privacy.html
+Allow: /terms.html
+
+# Assets
+Allow: /app.js
+Allow: /styles.css
+Allow: /chem/
+Allow: /tests/
+
+# Preferred version
+Host: stoichiometrycalculator.com
+
+# Sitemap location
+Sitemap: https://stoichiometrycalculator.com/sitemap.xml
+
+# Crawl delay (optional)
+Crawl-delay: 1
 
 # Sitemap
 Sitemap: https://stoichiometrycalculator.com/sitemap.xml

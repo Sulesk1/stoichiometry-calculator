@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stoichiometry Calculator - Test Suite</title>
+    <style>
+        body {
+            font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+            background: #f8fafc;
+        }
+        
+        .test-header {
+            background: white;
+            padding: 2rem;
+            border-radius: 0.5rem;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            margin-bottom: 2rem;
+        }
+        
+        .test-section {
+            background: white;
+            margin-bottom: 1.5rem;
+            border-radius: 0.5rem;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        
+        .test-section h3 {
+            background: #2563eb;
+            color: white;
+            margin: 0;
+            padding: 1rem 1.5rem;
+            font-size: 1.125rem;
+        }
+        
+        .test-content {
+            padding: 1.5rem;
+        }
+        
+        .test-case {
+            padding: 0.75rem;
+            margin-bottom: 0.5rem;
+            border-radius: 0.25rem;
+            font-family: 'Courier New', monospace;
+            font-size: 0.875rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .test-pass {
+            background: #dcfce7;
+            border: 1px solid #bbf7d0;
+            color: #166534;
+        }
+        
+        .test-fail {
+            background: #fef2f2;
+            border: 1px solid #fecaca;
+            color: #dc2626;
+        }
+        
+        .test-icon {
+            font-weight: bold;
+            font-size: 1rem;
+        }
+        
+        .test-summary {
+            background: #f1f5f9;
+            padding: 1rem;
+            border-radius: 0.25rem;
+            margin-top: 1rem;
+            font-weight: 500;
+        }
+        
+        .run-button {
+            background: #2563eb;
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.375rem;
+            cursor: pointer;
+            font-weight: 500;
+            margin-right: 0.5rem;
+        }
+        
+        .run-button:hover {
+            background: #1d4ed8;
+        }
+        
+        #console-output {
+            background: #1e293b;
+            color: #f1f5f9;
+            padding: 1rem;
+            border-radius: 0.375rem;
+            font-family: 'Courier New', monospace;
+            font-size: 0.875rem;
+            white-space: pre-wrap;
+            max-height: 200px;
+            overflow-y: auto;
+            margin-top: 1rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-header">
+        <h1>Stoichiometry Calculator Test Suite</h1>
+        <p>Comprehensive tests for all chemistry calculation modules</p>
+        <button class="run-button" onclick="runAllTests()">Run All Tests</button>
+        <button class="run-button" onclick="clearResults()">Clear Results</button>
+        <div id="console-output" style="display: none;"></div>
+    </div>
+
+    <div class="test-section">
+        <h3>Fraction Arithmetic Tests</h3>
+        <div class="test-content" id="fraction-tests">
+            <p>Click "Run All Tests" to see results</p>
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h3>Chemical Lexer Tests</h3>
+        <div class="test-content" id="lexer-tests">
+            <p>Click "Run All Tests" to see results</p>
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h3>Chemical Parser Tests</h3>
+        <div class="test-content" id="parser-tests">
+            <p>Click "Run All Tests" to see results</p>
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h3>Linear Algebra Tests</h3>
+        <div class="test-content" id="linear-tests">
+            <p>Click "Run All Tests" to see results</p>
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h3>Chemical Balancer Tests</h3>
+        <div class="test-content" id="balancer-tests">
+            <p>Click "Run All Tests" to see results</p>
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h3>Redox Helper Tests</h3>
+        <div class="test-content" id="redox-tests">
+            <p>Click "Run All Tests" to see results</p>
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h3>Mass Calculator Tests</h3>
+        <div class="test-content" id="mass-tests">
+            <p>Click "Run All Tests" to see results</p>
+        </div>
+    </div>
+
+    <script type="module">
+        import { Fraction } from '../chem/fractions.js';
+        import { Lexer } from '../chem/lexer.js';
+        import { Parser } from '../chem/parser.js';
+        import { Matrix, Vector } from '../chem/linear.js';
+        import { ChemicalBalancer } from '../chem/balancer.js';
+        import { RedoxHelper } from '../chem/redox.js';
+        import { MassCalculator } from '../chem/mass.js';
+
+        let testResults = {
+            total: 0,
+            passed: 0,
+            failed: 0
+        };
+
+        function log(message) {
+            const output = document.getElementById('console-output');
+            output.style.display = 'block';
+            output.textContent += message + '\n';
+            output.scrollTop = output.scrollHeight;
+        }
+
+        function assert(condition, message) {
+            testResults.total++;
+            if (condition) {
+                testResults.passed++;
+                displayTest(message, true);
+                log(`✓ ${message}`);
+            } else {
+                testResults.failed++;
+                displayTest(message, false);
+                log(`✗ ${message}`);
+            }
+        }
+
+        function displayTest(message, passed, sectionId = null) {
+            if (!sectionId) {
+                // Try to determine section based on current test context
+                sectionId = window.currentTestSection || 'fraction-tests';
+            }
+            
+            const section = document.getElementById(sectionId);
+            if (!section) return;
+
+            // Clear placeholder if this is the first test
+            if (section.children.length === 1 && section.children[0].tagName === 'P') {
+                section.innerHTML = '';
+            }
+
+            const testDiv = document.createElement('div');
+            testDiv.className = `test-case ${passed ? 'test-pass' : 'test-fail'}`;
+            testDiv.innerHTML = `
+                <span class="test-icon">${passed ? '✓' : '✗'}</span>
+                <span>${message}</span>
+            `;
+            section.appendChild(testDiv);
+        }
+
+        function testFractions() {
+            window.currentTestSection = 'fraction-tests';
+            log('Testing Fraction arithmetic...');
+
+            // Basic arithmetic
+            const a = new Fraction(1, 2);
+            const b = new Fraction(1, 3);
+            
+            assert(a.add(b).equals(new Fraction(5, 6)), 'Fraction addition: 1/2 + 1/3 = 5/6');
+            assert(a.subtract(b).equals(new Fraction(1, 6)), 'Fraction subtraction: 1/2 - 1/3 = 1/6');
+            assert(a.multiply(b).equals(new Fraction(1, 6)), 'Fraction multiplication: 1/2 × 1/3 = 1/6');
+            assert(a.divide(b).equals(new Fraction(3, 2)), 'Fraction division: (1/2) ÷ (1/3) = 3/2');
+
+            // Reduction
+            const unreduced = new Fraction(6, 9);
+            assert(unreduced.equals(new Fraction(2, 3)), 'Fraction reduction: 6/9 = 2/3');
+
+            // Negative fractions
+            const neg = new Fraction(-1, 2);
+            assert(neg.add(new Fraction(1, 4)).equals(new Fraction(-1, 4)), 'Negative fraction: -1/2 + 1/4 = -1/4');
+
+            // Zero handling
+            const zero = new Fraction(0, 1);
+            assert(zero.equals(new Fraction(0, 5)), 'Zero equivalence: 0/1 = 0/5');
+            assert(a.add(zero).equals(a), 'Zero addition identity');
+
+            // Conversion
+            assert(new Fraction(5, 2).toNumber() === 2.5, 'Fraction to number: 5/2 = 2.5');
+            assert(Fraction.fromNumber(0.75).equals(new Fraction(3, 4)), 'Number to fraction: 0.75 = 3/4');
+        }
+
+        function testLexer() {
+            window.currentTestSection = 'lexer-tests';
+            log('Testing chemical formula lexer...');
+
+            const lexer = new Lexer();
+
+            // Simple molecules
+            let tokens = lexer.tokenize('H2O');
+            assert(tokens.length === 3, 'H2O tokenization count');
+            assert(tokens[0].type === 'ELEMENT' && tokens[0].value === 'H', 'H2O: H element');
+            assert(tokens[1].type === 'NUMBER' && tokens[1].value === '2', 'H2O: subscript 2');
+            assert(tokens[2].type === 'ELEMENT' && tokens[2].value === 'O', 'H2O: O element');
+
+            // Complex molecules
+            tokens = lexer.tokenize('Ca(OH)2');
+            assert(tokens.length === 7, 'Ca(OH)2 tokenization count');
+            assert(tokens[1].type === 'LPAREN', 'Ca(OH)2: left parenthesis');
+            assert(tokens[4].type === 'RPAREN', 'Ca(OH)2: right parenthesis');
+
+            // Ions
+            tokens = lexer.tokenize('SO4^2-');
+            assert(tokens[tokens.length-2].type === 'CHARGE_NUMBER', 'SO4^2- charge number');
+            assert(tokens[tokens.length-1].type === 'CHARGE_SIGN', 'SO4^2- charge sign');
+
+            // Hydrates
+            tokens = lexer.tokenize('CuSO4·5H2O');
+            const dotIndex = tokens.findIndex(t => t.type === 'DOT');
+            assert(dotIndex !== -1, 'CuSO4·5H2O: hydrate dot found');
+
+            // Phases
+            tokens = lexer.tokenize('NaCl(s)');
+            const phaseIndex = tokens.findIndex(t => t.type === 'PHASE');
+            assert(phaseIndex !== -1, 'NaCl(s): phase state found');
+
+            log('Chemical lexer tests completed');
+        }
+
+        function testParser() {
+            window.currentTestSection = 'parser-tests';
+            log('Testing chemical formula parser...');
+
+            const parser = new Parser();
+
+            // Simple molecules
+            let result = parser.parse('H2O');
+            assert(result.elements.H === 2, 'H2O: hydrogen count');
+            assert(result.elements.O === 1, 'H2O: oxygen count');
+
+            // Complex molecules
+            result = parser.parse('Ca(OH)2');
+            assert(result.elements.Ca === 1, 'Ca(OH)2: calcium count');
+            assert(result.elements.O === 2, 'Ca(OH)2: oxygen count');
+            assert(result.elements.H === 2, 'Ca(OH)2: hydrogen count');
+
+            // Nested parentheses
+            result = parser.parse('Al2(SO4)3');
+            assert(result.elements.Al === 2, 'Al2(SO4)3: aluminum count');
+            assert(result.elements.S === 3, 'Al2(SO4)3: sulfur count');
+            assert(result.elements.O === 12, 'Al2(SO4)3: oxygen count');
+
+            // Ions
+            result = parser.parse('SO4^2-');
+            assert(result.charge === -2, 'SO4^2-: charge');
+            assert(result.elements.S === 1, 'SO4^2-: sulfur count');
+            assert(result.elements.O === 4, 'SO4^2-: oxygen count');
+
+            // Coefficients (should be ignored by parser)
+            result = parser.parse('2H2O');
+            assert(result.elements.H === 2, '2H2O: hydrogen count (ignores coefficient)');
+            assert(result.elements.O === 1, '2H2O: oxygen count (ignores coefficient)');
+
+            log('Chemical parser tests completed');
+        }
+
+        function testLinearAlgebra() {
+            window.currentTestSection = 'linear-tests';
+            log('Testing linear algebra operations...');
+
+            // Matrix creation and access
+            const matrix = new Matrix(2, 3);
+            matrix.set(0, 0, new Fraction(1, 1));
+            matrix.set(0, 1, new Fraction(2, 1));
+            matrix.set(1, 2, new Fraction(3, 1));
+            
+            assert(matrix.get(0, 0).equals(new Fraction(1, 1)), 'Matrix element access (0,0)');
+            assert(matrix.get(0, 1).equals(new Fraction(2, 1)), 'Matrix element access (0,1)');
+            assert(matrix.get(1, 2).equals(new Fraction(3, 1)), 'Matrix element access (1,2)');
+
+            // Vector operations
+            const v1 = new Vector([new Fraction(1, 1), new Fraction(2, 1), new Fraction(3, 1)]);
+            const v2 = new Vector([new Fraction(4, 1), new Fraction(5, 1), new Fraction(6, 1)]);
+            
+            const dotProduct = v1.dot(v2);
+            assert(dotProduct.equals(new Fraction(32, 1)), 'Vector dot product: [1,2,3]·[4,5,6] = 32');
+
+            // Matrix RREF (simple case)
+            const simpleMatrix = new Matrix(2, 3);
+            simpleMatrix.set(0, 0, new Fraction(2, 1));
+            simpleMatrix.set(0, 1, new Fraction(4, 1));
+            simpleMatrix.set(0, 2, new Fraction(6, 1));
+            simpleMatrix.set(1, 0, new Fraction(1, 1));
+            simpleMatrix.set(1, 1, new Fraction(2, 1));
+            simpleMatrix.set(1, 2, new Fraction(3, 1));
+
+            const rref = simpleMatrix.rref();
+            assert(rref.get(0, 0).equals(new Fraction(1, 1)), 'RREF: leading coefficient normalized');
+            
+            log('Linear algebra tests completed');
+        }
+
+        function testBalancer() {
+            window.currentTestSection = 'balancer-tests';
+            log('Testing chemical equation balancer...');
+
+            const balancer = new ChemicalBalancer();
+
+            // Simple combustion
+            const compounds1 = [
+                { composition: { C: 1, H: 4 } },  // CH4
+                { composition: { O: 2 } },        // O2
+                { composition: { C: 1, O: 2 } },  // CO2
+                { composition: { H: 2, O: 1 } }   // H2O
+            ];
+
+            const result1 = balancer.balance(compounds1);
+            assert(result1.success, 'CH4 + O2 → CO2 + H2O: balancing successful');
+            
+            if (result1.success) {
+                // CH4 + 2O2 → CO2 + 2H2O
+                assert(result1.coefficients[0].equals(new Fraction(1, 1)), 'CH4 coefficient = 1');
+                assert(result1.coefficients[1].equals(new Fraction(2, 1)), 'O2 coefficient = 2');
+                assert(result1.coefficients[2].equals(new Fraction(1, 1)), 'CO2 coefficient = 1');
+                assert(result1.coefficients[3].equals(new Fraction(2, 1)), 'H2O coefficient = 2');
+            }
+
+            // More complex reaction
+            const compounds2 = [
+                { composition: { Fe: 1 } },           // Fe
+                { composition: { H: 1, Cl: 1 } },     // HCl
+                { composition: { Fe: 1, Cl: 2 } },    // FeCl2
+                { composition: { H: 2 } }             // H2
+            ];
+
+            const result2 = balancer.balance(compounds2);
+            assert(result2.success, 'Fe + HCl → FeCl2 + H2: balancing successful');
+
+            if (result2.success) {
+                // Fe + 2HCl → FeCl2 + H2
+                assert(result2.coefficients[0].equals(new Fraction(1, 1)), 'Fe coefficient = 1');
+                assert(result2.coefficients[1].equals(new Fraction(2, 1)), 'HCl coefficient = 2');
+                assert(result2.coefficients[2].equals(new Fraction(1, 1)), 'FeCl2 coefficient = 1');
+                assert(result2.coefficients[3].equals(new Fraction(1, 1)), 'H2 coefficient = 1');
+            }
+
+            log('Chemical balancer tests completed');
+        }
+
+        function testRedoxHelper() {
+            window.currentTestSection = 'redox-tests';
+            log('Testing redox helper...');
+
+            const redoxHelper = new RedoxHelper();
+
+            // Test redox couple recognition
+            const couples = redoxHelper.getCommonRedoxCouples();
+            assert(couples.length > 0, 'Common redox couples database loaded');
+
+            const permanganate = couples.find(c => c.oxidized === 'MnO4^-');
+            assert(permanganate !== undefined, 'Permanganate redox couple found');
+            
+            if (permanganate) {
+                assert(permanganate.acidic === 'Mn^2+', 'Permanganate reduction in acidic medium');
+                assert(permanganate.basic === 'MnO2', 'Permanganate reduction in basic medium');
+            }
+
+            // Test medium suggestion
+            const suggestion = redoxHelper.suggestMedium(['KMnO4', 'H2SO4', 'FeSO4']);
+            assert(suggestion.medium === 'acidic', 'Acidic medium suggested for permanganate + acid');
+            assert(suggestion.confidence > 0.5, 'Medium suggestion has reasonable confidence');
+
+            // Test redox validation
+            const isRedox = redoxHelper.isLikelyRedox(['Fe', 'Cu^2+', 'Fe^2+', 'Cu']);
+            assert(isRedox, 'Fe + Cu^2+ → Fe^2+ + Cu recognized as redox');
+
+            log('Redox helper tests completed');
+        }
+
+        function testMassCalculator() {
+            window.currentTestSection = 'mass-tests';
+            log('Testing mass calculator...');
+
+            const massCalc = new MassCalculator();
+
+            // Simple molecules
+            const h2o_mass = massCalc.calculateMolarMass({ H: 2, O: 1 });
+            assert(Math.abs(h2o_mass - 18.015) < 0.1, 'H2O molar mass ≈ 18.015 g/mol');
+
+            const co2_mass = massCalc.calculateMolarMass({ C: 1, O: 2 });
+            assert(Math.abs(co2_mass - 44.010) < 0.1, 'CO2 molar mass ≈ 44.010 g/mol');
+
+            // Complex molecules
+            const glucose_mass = massCalc.calculateMolarMass({ C: 6, H: 12, O: 6 });
+            assert(Math.abs(glucose_mass - 180.156) < 0.5, 'C6H12O6 molar mass ≈ 180.156 g/mol');
+
+            // Ionic compounds
+            const nacl_mass = massCalc.calculateMolarMass({ Na: 1, Cl: 1 });
+            assert(Math.abs(nacl_mass - 58.443) < 0.1, 'NaCl molar mass ≈ 58.443 g/mol');
+
+            // Test periodic table access
+            const elements = massCalc.getPeriodicTable();
+            assert(elements.H !== undefined, 'Hydrogen data available');
+            assert(elements.C !== undefined, 'Carbon data available');
+            assert(elements.O !== undefined, 'Oxygen data available');
+            
+            if (elements.H) {
+                assert(Math.abs(elements.H.mass - 1.008) < 0.01, 'Hydrogen atomic mass ≈ 1.008');
+                assert(elements.H.number === 1, 'Hydrogen atomic number = 1');
+                assert(elements.H.symbol === 'H', 'Hydrogen symbol = H');
+            }
+
+            // Empirical formula calculation
+            const empirical = massCalc.calculateEmpiricalFormula({ C: 2, H: 6 });
+            assert(empirical.C === 1 && empirical.H === 3, 'C2H6 empirical formula = CH3');
+
+            log('Mass calculator tests completed');
+        }
+
+        function showSummary() {
+            const summaryDiv = document.createElement('div');
+            summaryDiv.className = 'test-summary';
+            summaryDiv.innerHTML = `
+                <strong>Test Summary:</strong><br>
+                Total tests: ${testResults.total}<br>
+                Passed: ${testResults.passed} ✓<br>
+                Failed: ${testResults.failed} ${testResults.failed > 0 ? '✗' : ''}<br>
+                Success rate: ${testResults.total > 0 ? Math.round((testResults.passed / testResults.total) * 100) : 0}%
+            `;
+
+            // Add to each test section
+            document.querySelectorAll('.test-content').forEach(section => {
+                const existingSummary = section.querySelector('.test-summary');
+                if (existingSummary) {
+                    existingSummary.remove();
+                }
+                section.appendChild(summaryDiv.cloneNode(true));
+            });
+
+            log(`\nTest Summary: ${testResults.passed}/${testResults.total} tests passed (${testResults.total > 0 ? Math.round((testResults.passed / testResults.total) * 100) : 0}%)`);
+        }
+
+        // Global functions for HTML buttons
+        window.runAllTests = function() {
+            testResults = { total: 0, passed: 0, failed: 0 };
+            clearResults();
+            
+            log('Starting comprehensive test suite...\n');
+
+            try {
+                testFractions();
+                testLexer();
+                testParser();
+                testLinearAlgebra();
+                testBalancer();
+                testRedoxHelper();
+                testMassCalculator();
+
+                showSummary();
+                log('\nAll tests completed!');
+            } catch (error) {
+                log(`\nTest suite error: ${error.message}`);
+                console.error('Test error:', error);
+            }
+        };
+
+        window.clearResults = function() {
+            document.querySelectorAll('.test-content').forEach(section => {
+                section.innerHTML = '<p>Click "Run All Tests" to see results</p>';
+            });
+            
+            const output = document.getElementById('console-output');
+            output.textContent = '';
+            output.style.display = 'none';
+        };
+
+        // Auto-run tests on load (optional)
+        // window.addEventListener('load', () => {
+        //     setTimeout(runAllTests, 500);
+        // });
+    </script>
+</body>
+</html>
