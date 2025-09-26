@@ -147,13 +147,39 @@ function parseChemicalFormula(formula) {
     };
 }
 
+// Strip leading stoichiometric coefficients and parse formula
+function parseSpeciesWithLeadingCoeff(speciesString) {
+    const trimmed = speciesString.trim();
+    
+    // Match optional leading coefficient followed by formula
+    const match = trimmed.match(/^(\d+)?\s*([A-Za-z(\[].*)$/);
+    
+    if (match) {
+        const userCoeff = match[1] ? parseInt(match[1]) : 1;
+        const formulaPart = match[2];
+        
+        // Parse the formula part (without leading coefficient)
+        const parsed = parseChemicalFormula(formulaPart);
+        if (parsed) {
+            // Ignore user coefficient - let the balancer determine correct coefficients
+            // Store the user's attempted coefficient for reference if needed
+            parsed.userInputCoefficient = userCoeff;
+            return parsed;
+        }
+    }
+    
+    // Fallback to original parsing (handles cases like H2O, Ca(OH)2)
+    return parseChemicalFormula(trimmed);
+}
+
 // Parse equation into reactants and products with spectator cancellation
 function parseChemicalEquation(equation) {
     const [left, right] = equation.split(/[=→]/);
     if (!left || !right) return null;
     
-    let reactants = left.split('+').map(s => parseChemicalFormula(s.trim())).filter(r => r);
-    let products = right.split('+').map(s => parseChemicalFormula(s.trim())).filter(p => p);
+    // Parse each side, handling leading coefficients like "2O2"
+    let reactants = left.split('+').map(s => parseSpeciesWithLeadingCoeff(s)).filter(r => r);
+    let products = right.split('+').map(s => parseSpeciesWithLeadingCoeff(s)).filter(p => p);
     
     // Merge duplicates and cancel spectators
     const simplified = cancelSpectatorsAndMergeDuplicates(reactants, products);
@@ -396,7 +422,7 @@ function computeNullspace(matrix) {
     return nullspaceBasis;
 }
 
-// Convert fractions to integers and find best solution
+// Convert fractions to integers and find best solution with strict positivity
 function findBestIntegerSolution(nullspaceBasis, numReactants) {
     if (!nullspaceBasis || nullspaceBasis.length === 0) return null;
     
@@ -404,31 +430,48 @@ function findBestIntegerSolution(nullspaceBasis, numReactants) {
     let bestScore = Infinity;
     
     // Try each basis vector
-    nullspaceBasis.forEach(basis => {
-        // Ensure at least one product has positive coefficient
-        let hasPositiveProduct = false;
-        for (let i = numReactants; i < basis.length; i++) {
-            if (basis[i].toNumber() > 0) {
-                hasPositiveProduct = true;
-                break;
-            }
-        }
+    nullspaceBasis.forEach(originalBasis => {
+        // Try both the original vector and its negation
+        const candidateVectors = [originalBasis, originalBasis.map(f => f.multiply(new Fraction(-1)))];
         
-        if (!hasPositiveProduct) {
-            // Negate the solution
-            basis = basis.map(f => f.multiply(new Fraction(-1)));
-        }
-        
-        // Convert to integers
-        const integers = convertToIntegers(basis);
-        if (integers) {
-            const maxCoeff = Math.max(...integers);
-            const sumCoeff = integers.reduce((a, b) => a + b, 0);
-            const score = maxCoeff * 1000 + sumCoeff; // Prefer smaller max, then smaller sum
+        for (const basis of candidateVectors) {
+            // Convert to integers first to check signs properly
+            const integers = convertToIntegers(basis);
+            if (!integers) continue;
             
-            if (score < bestScore) {
-                bestScore = score;
-                bestSolution = integers;
+            // Strict validation: ALL reactants must be > 0 AND ALL products must be > 0
+            let allReactantsPositive = true;
+            let allProductsPositive = true;
+            
+            // Check reactants (indices 0 to numReactants-1)
+            for (let i = 0; i < numReactants; i++) {
+                if (integers[i] <= 0) {
+                    allReactantsPositive = false;
+                    break;
+                }
+            }
+            
+            // Check products (indices numReactants to end)
+            for (let i = numReactants; i < integers.length; i++) {
+                if (integers[i] <= 0) {
+                    allProductsPositive = false;
+                    break;
+                }
+            }
+            
+            // Only accept candidates where all coefficients are positive on their respective sides
+            if (allReactantsPositive && allProductsPositive) {
+                const maxCoeff = Math.max(...integers);
+                const sumCoeff = integers.reduce((a, b) => a + b, 0);
+                const score = maxCoeff * 1000 + sumCoeff; // Prefer smaller max, then smaller sum
+                
+                if (score < bestScore) {
+                    bestScore = score;
+                    bestSolution = integers;
+                }
+                
+                // Found a valid candidate, no need to try negation
+                break;
             }
         }
     });
