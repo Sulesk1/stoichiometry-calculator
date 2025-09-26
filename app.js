@@ -67,12 +67,14 @@ class Fraction {
     }
 }
 
-// Parse chemical formula with proper element extraction
+// Parse chemical formula with proper element extraction and phase preservation
 function parseChemicalFormula(formula) {
-    // Extract coefficient
-    const match = formula.match(/^(\d*)\s*(.+)$/);
+    // Extract coefficient and check for phase notation
+    const match = formula.match(/^(\d*)\s*(.+?)(\([slgaq]+\))?$/);
     const coefficient = match[1] ? parseInt(match[1]) : 1;
     const compound = match[2];
+    const phaseMatch = match[3];
+    const phase = phaseMatch ? phaseMatch.slice(1, -1) : null; // Remove parentheses
     
     const composition = {};
     let charge = 0;
@@ -140,19 +142,115 @@ function parseChemicalFormula(formula) {
         originalFormula: formula,
         coefficient: coefficient,
         composition: parsed,
-        charge: charge
+        charge: charge,
+        phase: phase
     };
 }
 
-// Parse equation into reactants and products
+// Parse equation into reactants and products with spectator cancellation
 function parseChemicalEquation(equation) {
     const [left, right] = equation.split(/[=→]/);
     if (!left || !right) return null;
     
-    const reactants = left.split('+').map(s => parseChemicalFormula(s.trim())).filter(r => r);
-    const products = right.split('+').map(s => parseChemicalFormula(s.trim())).filter(p => p);
+    let reactants = left.split('+').map(s => parseChemicalFormula(s.trim())).filter(r => r);
+    let products = right.split('+').map(s => parseChemicalFormula(s.trim())).filter(p => p);
     
-    return { reactants, products };
+    // Merge duplicates and cancel spectators
+    const simplified = cancelSpectatorsAndMergeDuplicates(reactants, products);
+    
+    return { 
+        reactants: simplified.reactants, 
+        products: simplified.products,
+        canceledSpectators: simplified.canceledSpectators
+    };
+}
+
+// Cancel spectator species and merge duplicate entries
+function cancelSpectatorsAndMergeDuplicates(reactants, products) {
+    // First merge duplicates on each side
+    const mergedReactants = mergeDuplicates(reactants);
+    const mergedProducts = mergeDuplicates(products);
+    
+    // Find spectators (species appearing on both sides)
+    const canceledSpectators = [];
+    const finalReactants = [];
+    const finalProducts = [];
+    
+    // Copy all species to final arrays initially
+    for (const reactant of mergedReactants) {
+        finalReactants.push({ ...reactant });
+    }
+    for (const product of mergedProducts) {
+        finalProducts.push({ ...product });
+    }
+    
+    // Look for matching species to cancel
+    for (let i = 0; i < finalReactants.length; i++) {
+        const reactant = finalReactants[i];
+        if (!reactant) continue;
+        
+        for (let j = 0; j < finalProducts.length; j++) {
+            const product = finalProducts[j];
+            if (!product) continue;
+            
+            // Check if same formula (ignoring coefficients)
+            if (reactant.formula === product.formula && 
+                reactant.charge === product.charge &&
+                reactant.phase === product.phase) {
+                
+                const minCoeff = Math.min(reactant.coefficient, product.coefficient);
+                
+                if (minCoeff > 0) {
+                    canceledSpectators.push({
+                        formula: reactant.formula,
+                        coefficient: minCoeff,
+                        phase: reactant.phase
+                    });
+                    
+                    // Reduce coefficients
+                    reactant.coefficient -= minCoeff;
+                    product.coefficient -= minCoeff;
+                    
+                    // Remove if coefficient becomes 0
+                    if (reactant.coefficient === 0) {
+                        finalReactants[i] = null;
+                    }
+                    if (product.coefficient === 0) {
+                        finalProducts[j] = null;
+                    }
+                }
+            }
+        }
+    }
+    
+    return {
+        reactants: finalReactants.filter(r => r !== null && r.coefficient > 0),
+        products: finalProducts.filter(p => p !== null && p.coefficient > 0),
+        canceledSpectators: canceledSpectators
+    };
+}
+
+// Merge duplicate species by summing coefficients
+function mergeDuplicates(species) {
+    const merged = [];
+    const formulaMap = new Map();
+    
+    for (const compound of species) {
+        const key = `${compound.formula}_${compound.charge || 0}_${compound.phase || ''}`;
+        
+        if (formulaMap.has(key)) {
+            // Add to existing
+            const existing = formulaMap.get(key);
+            existing.coefficient += compound.coefficient;
+        } else {
+            // Create new entry
+            const newCompound = { ...compound };
+            formulaMap.set(key, newCompound);
+            merged.push(newCompound);
+        }
+    }
+    
+    return merged.filter(compound => compound.coefficient > 0);
 }
 
 // Build matrix A for balancing
@@ -378,8 +476,8 @@ function lcmTwo(a, b) {
     return Math.abs(a * b) / gcdTwo(a, b);
 }
 
-// Main balancing function
-function balanceChemicalEquation(equation, isRedox = false) {
+// Main balancing function with redox analysis
+function balanceChemicalEquation(equation, isRedoxMode = false) {
     try {
         const parsed = parseChemicalEquation(equation);
         if (!parsed) {
@@ -387,27 +485,47 @@ function balanceChemicalEquation(equation, isRedox = false) {
         }
         
         const { reactants, products } = parsed;
-        const { matrix, elements, compounds } = buildBalanceMatrix(reactants, products, isRedox);
+        
+        // Analyze oxidation states to detect true redox
+        const osEngine = new OxidationStateEngine();
+        const redoxAnalysis = osEngine.analyzeRedoxReaction(reactants, products);
+        const isActuallyRedox = redoxAnalysis.isRedox;
+        
+        // Use redox balancing if it's actually a redox reaction
+        const useChargeBalance = isRedoxMode || isActuallyRedox;
+        const { matrix, elements, compounds } = buildBalanceMatrix(reactants, products, useChargeBalance);
         
         const nullspace = computeNullspace(matrix);
         if (!nullspace) {
-            return { success: false, error: 'No solution exists. Check if the equation is chemically valid.' };
+            return { 
+                success: false, 
+                error: 'No solution exists. Check if the equation is chemically valid.',
+                redoxAnalysis 
+            };
         }
         
         const coefficients = findBestIntegerSolution(nullspace, reactants.length);
         if (!coefficients) {
-            return { success: false, error: 'Could not find integer solution.' };
+            return { 
+                success: false, 
+                error: 'Could not find integer solution.',
+                redoxAnalysis 
+            };
         }
         
-        // Format result
+        // Format result with preserved phases
         const reactantStrs = reactants.map((compound, i) => {
             const coeff = coefficients[i];
-            return (coeff > 1 ? coeff : '') + compound.formula;
+            const coeffStr = coeff > 1 ? coeff : '';
+            const phase = compound.phase ? `(${compound.phase})` : '';
+            return coeffStr + compound.formula + phase;
         });
         
         const productStrs = products.map((compound, i) => {
             const coeff = coefficients[reactants.length + i];
-            return (coeff > 1 ? coeff : '') + compound.formula;
+            const coeffStr = coeff > 1 ? coeff : '';
+            const phase = compound.phase ? `(${compound.phase})` : '';
+            return coeffStr + compound.formula + phase;
         });
         
         const balanced = reactantStrs.join(' + ') + ' → ' + productStrs.join(' + ');
@@ -418,7 +536,10 @@ function balanceChemicalEquation(equation, isRedox = false) {
             coefficients: coefficients,
             reactants: reactants,
             products: products,
-            original: equation
+            original: equation,
+            redoxAnalysis: redoxAnalysis,
+            isRedox: isActuallyRedox,
+            elements: elements
         };
         
     } catch (error) {
@@ -904,11 +1025,50 @@ class StoichiometryCalculator {
             detailsHTML += '</div>';
         }
 
-        // Redox explanation if applicable
-        if (this.currentMode === 'redox') {
+        // Redox analysis if available
+        if (result.redoxAnalysis) {
+            const redox = result.redoxAnalysis;
+            
+            if (redox.isRedox) {
+                detailsHTML += `
+                    <h4>⚡ Redox Analysis</h4>
+                    <p><strong>This IS a redox reaction!</strong> Oxidation states change.</p>
+                `;
+                
+                // Show oxidation state changes
+                if (Object.keys(redox.osChanges).length > 0) {
+                    detailsHTML += '<div class="redox-changes">';
+                    for (const [element, change] of Object.entries(redox.osChanges)) {
+                        const direction = change.oxidized && change.reduced ? 'both oxidized & reduced' :
+                                        change.oxidized ? 'oxidized' : 'reduced';
+                        const color = change.oxidized && !change.reduced ? '#dc2626' : 
+                                    change.reduced && !change.oxidized ? '#059669' : '#7c3aed';
+                        
+                        detailsHTML += `
+                            <div class="os-change" style="border-left: 3px solid ${color};">
+                                <strong>${element}</strong>: ${direction}
+                                <br><small>OS: [${change.reactantRange.join(', ')}] → [${change.productRange.join(', ')}]</small>
+                            </div>
+                        `;
+                    }
+                    detailsHTML += '</div>';
+                }
+                
+                // Show electron transfer
+                if (redox.electronTransfer > 0) {
+                    detailsHTML += `<p><strong>Electrons transferred:</strong> ${redox.electronTransfer}</p>`;
+                }
+                
+            } else {
+                detailsHTML += `
+                    <h4>⚖️ Not a Redox Reaction</h4>
+                    <p>No oxidation state changes detected - this is an acid-base, precipitation, or other non-redox reaction.</p>
+                `;
+            }
+        } else if (this.currentMode === 'redox') {
             detailsHTML += `
-                <h4>⚡ Redox Balancing</h4>
-                <p>For redox equations, charge balance is included as an additional constraint.</p>
+                <h4>⚡ Redox Mode</h4>
+                <p>Redox balancing mode includes charge balance constraints.</p>
                 <p>The algorithm automatically balances both mass and charge conservation.</p>
             `;
         }

@@ -141,11 +141,14 @@ export class ChemicalLexer {
     return null;
   }
   
-  // Read phase notation (s), (l), (g), (aq)
+  // Read phase notation (s), (l), (g), (aq) with lookahead only
   readPhase() {
     const start = this.position;
     
     if (this.current() === '(' && this.peek()) {
+      // Save position for rollback if not a valid phase
+      const savedPosition = this.position;
+      
       this.advance(); // skip (
       let phase = '';
       
@@ -155,13 +158,15 @@ export class ChemicalLexer {
       }
       
       if (this.current() === ')') {
-        this.advance(); // skip )
-        
-        // Validate phase
+        // Validate phase before consuming closing paren
         if (['s', 'l', 'g', 'aq'].includes(phase.toLowerCase())) {
+          this.advance(); // skip )
           return new Token(TokenType.PHASE, phase.toLowerCase(), start);
         }
       }
+      
+      // Not a valid phase - restore position
+      this.position = savedPosition;
     }
     
     return null;
