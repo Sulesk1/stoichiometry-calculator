@@ -692,6 +692,100 @@ function lcmTwo(a, b) {
     return Math.abs(a * b) / gcdTwo(a, b);
 }
 
+// Heuristic diagnostic for charge imbalance with optional suggestions
+function attemptChargeMismatchDiagnostic(reactants, products, redoxAnalysis, reason) {
+    try {
+        const elementOnly = buildBalanceMatrix(reactants, products, false);
+        const nullspaceElementOnly = computeNullspace(elementOnly.matrix);
+        if (!nullspaceElementOnly) return null; // even elements won't balance
+        const coeffsElementOnly = findBestIntegerSolution(nullspaceElementOnly, reactants.length);
+        if (!coeffsElementOnly) return null;
+        // Compute charges under that element-only balance
+        const reactantCharge = reactants.reduce((sum, c, i) => sum + (c.charge || 0) * coeffsElementOnly[i], 0);
+        const productCharge = products.reduce((sum, c, i) => sum + (c.charge || 0) * coeffsElementOnly[reactants.length + i], 0);
+        if (reactantCharge === productCharge) return null; // Not purely charge caused
+
+        const rStr = reactants.map((c, i) => {
+            const k = coeffsElementOnly[i];
+            const phase = c.phase ? `(${c.phase})` : '';
+            return (k > 1 ? k + ' ' : '') + c.formula + phase;
+        }).join(' + ');
+        const pStr = products.map((c, i) => {
+            const k = coeffsElementOnly[reactants.length + i];
+            const phase = c.phase ? `(${c.phase})` : '';
+            return (k > 1 ? k + ' ' : '') + c.formula + phase;
+        }).join(' + ');
+
+        // Build suggestions
+        const suggestions = [];
+
+        // 1. Prussian blue family heuristic
+        const hasFerrocyanide = [...reactants, ...products].some(c => /\[Fe\(CN\)6\]/.test(c.formula));
+        const hasFreeFe3 = reactants.some(c => /^Fe\^?3\+?$/.test(c.originalFormula || c.formula)) || products.some(c => /^Fe\^?3\+?$/.test(c.originalFormula || c.formula));
+        const productHasMixed = products.some(c => /Fe\[Fe\(CN\)6\]/.test(c.formula));
+        if (hasFerrocyanide && (hasFreeFe3 || productHasMixed)) {
+            suggestions.push('Typical neutral complex: 4 Fe^3+ + 3 [Fe(CN)6]^4- → Fe4[Fe(CN)6]3');
+            suggestions.push('Shorthand variants: Fe3[Fe(CN)6]2 (different lattice hydration)');
+        }
+
+        // 2. Counter-ion inference (simple): determine minimal monatomic ions to neutralize
+        const netDelta = productCharge - reactantCharge; // what difference exists after element-only attempt
+        if (netDelta !== 0) {
+            // Suggest adding counter-ions WITHOUT altering existing species counts
+            const counterSuggestions = inferCounterIons(netDelta);
+            if (counterSuggestions.length) {
+                suggestions.push('Add counter-ions: ' + counterSuggestions.join(' or '));
+            }
+        }
+
+        // 3. If product appears neutral but reactant net charge non-zero, hint missing spectator salt
+        if (reactantCharge !== 0 && productCharge === 0) {
+            suggestions.push('Reaction may require spectator ions (e.g., K+, Na+, Cl-, NO3-) or precipitation form.');
+        }
+
+        const suggestionText = suggestions.length ? '\nSuggestions: ' + suggestions.join(' | ') : '';
+
+        return {
+            success: false,
+            error: `Charge imbalance detected (reactants ${reactantCharge}, products ${productCharge}). Elements could balance as: ${rStr} → ${pStr}.${suggestionText}`,
+            redoxAnalysis,
+            diagnostic: {
+                type: 'CHARGE_IMBALANCE',
+                reason,
+                elementBalancedEquation: `${rStr} → ${pStr}`,
+                reactantCharge,
+                productCharge,
+                suggestions
+            }
+        };
+    } catch (e) {
+        return null; // Fail silently; original error path will report
+    }
+}
+
+// Infer simple counter-ions set to neutralize a net charge difference (positive means products higher)
+function inferCounterIons(netDelta) {
+    const suggestions = [];
+    // If products have higher charge (netDelta > 0), need anions on product side or cations on reactant side
+    // We'll just suggest adding ions to the deficient side conceptually.
+    const abs = Math.abs(netDelta);
+    if (abs === 0) return suggestions;
+    // Provide a few canonical sets: monovalent, divalent combos
+    const ionSets = [
+        { ion: netDelta > 0 ? 'Cl-' : 'K+', charge: netDelta > 0 ? -1 : +1 },
+        { ion: netDelta > 0 ? 'NO3-' : 'Na+', charge: netDelta > 0 ? -1 : +1 },
+        { ion: netDelta > 0 ? 'SO4^2-' : 'Ca^2+', charge: netDelta > 0 ? -2 : +2 }
+    ];
+    ionSets.forEach(set => {
+        const count = Math.ceil(abs / Math.abs(set.charge));
+        const total = count * set.charge;
+        if (total === (netDelta > 0 ? -abs : abs) || Math.sign(total) !== Math.sign(netDelta)) {
+            suggestions.push(`${count} ${set.ion}`);
+        }
+    });
+    return suggestions;
+}
+
 // Main balancing function with mode validation
 function balanceChemicalEquation(equation, mode = 'standard') {
     try {
@@ -728,103 +822,22 @@ function balanceChemicalEquation(equation, mode = 'standard') {
         
         const nullspace = computeNullspace(matrix);
         if (!nullspace) {
-            // Attempt diagnostic: is the equation element-balanced but charge-imbalanced?
+            let fallbackResult = null;
             if (useChargeBalance) {
-                const elementOnly = buildBalanceMatrix(reactants, products, false);
-                const nullspaceElementOnly = computeNullspace(elementOnly.matrix);
-                if (nullspaceElementOnly) {
-                    const coeffsElementOnly = findBestIntegerSolution(nullspaceElementOnly, reactants.length);
-                    if (coeffsElementOnly) {
-                        // Compute net charges
-                        const reactantCharge = reactants.reduce((sum, c, i) => sum + (c.charge || 0) * coeffsElementOnly[i], 0);
-                        const productCharge = products.reduce((sum, c, i) => sum + (c.charge || 0) * coeffsElementOnly[reactants.length + i], 0);
-                        if (reactantCharge !== productCharge) {
-                            // Build pretty element-only balanced string
-                            const rStr = reactants.map((c, i) => {
-                                const k = coeffsElementOnly[i];
-                                const phase = c.phase ? `(${c.phase})` : '';
-                                return (k > 1 ? k + ' ' : '') + c.formula + phase;
-                            }).join(' + ');
-                            const pStr = products.map((c, i) => {
-                                const k = coeffsElementOnly[reactants.length + i];
-                                const phase = c.phase ? `(${c.phase})` : '';
-                                return (k > 1 ? k + ' ' : '') + c.formula + phase;
-                            }).join(' + ');
-                            let suggestion = '';
-                            // Heuristic suggestion for common Prussian blue style mismatch
-                            const productFormulas = products.map(p => p.formula);
-                            if (productFormulas.some(f => /Fe\[Fe\(CN\)6\]/.test(f))) {
-                                suggestion = ' Known related neutral precipitate: 4 Fe^3+ + 3 [Fe(CN)6]^4- → Fe4[Fe(CN)6]3.';
-                            }
-                            return {
-                                success: false,
-                                error: `Equation cannot be balanced under charge conservation. Elements balance as: ${rStr} → ${pStr} but net charge differs (reactants ${reactantCharge}, products ${productCharge}).${suggestion} The written equation is missing additional ions or incorrect stoichiometry.`,
-                                redoxAnalysis,
-                                diagnostic: {
-                                    type: 'CHARGE_IMBALANCE',
-                                    elementBalancedEquation: `${rStr} → ${pStr}`,
-                                    reactantCharge,
-                                    productCharge
-                                }
-                            };
-                        }
-                    }
-                }
+                fallbackResult = attemptChargeMismatchDiagnostic(reactants, products, redoxAnalysis, 'NO_NULLSPACE');
+                if (fallbackResult) return fallbackResult;
             }
-            return { 
-                success: false, 
-                error: 'No solution exists. Check if the equation is chemically valid.',
-                redoxAnalysis 
-            };
+            return { success: false, error: 'No solution exists. Check if the equation is chemically valid.', redoxAnalysis };
         }
         
         const coefficients = findBestIntegerSolution(nullspace, reactants.length);
         if (!coefficients) {
-            // Same diagnostic fallback if nullspace basis exists but no valid all-positive vector
+            let fallbackResult = null;
             if (useChargeBalance) {
-                const elementOnly = buildBalanceMatrix(reactants, products, false);
-                const nullspaceElementOnly = computeNullspace(elementOnly.matrix);
-                if (nullspaceElementOnly) {
-                    const coeffsElementOnly = findBestIntegerSolution(nullspaceElementOnly, reactants.length);
-                    if (coeffsElementOnly) {
-                        const reactantCharge = reactants.reduce((sum, c, i) => sum + (c.charge || 0) * coeffsElementOnly[i], 0);
-                        const productCharge = products.reduce((sum, c, i) => sum + (c.charge || 0) * coeffsElementOnly[reactants.length + i], 0);
-                        if (reactantCharge !== productCharge) {
-                            const rStr = reactants.map((c, i) => {
-                                const k = coeffsElementOnly[i];
-                                const phase = c.phase ? `(${c.phase})` : '';
-                                return (k > 1 ? k + ' ' : '') + c.formula + phase;
-                            }).join(' + ');
-                            const pStr = products.map((c, i) => {
-                                const k = coeffsElementOnly[reactants.length + i];
-                                const phase = c.phase ? `(${c.phase})` : '';
-                                return (k > 1 ? k + ' ' : '') + c.formula + phase;
-                            }).join(' + ');
-                            let suggestion = '';
-                            const productFormulas = products.map(p => p.formula);
-                            if (productFormulas.some(f => /Fe\[Fe\(CN\)6\]/.test(f))) {
-                                suggestion = ' Consider Fe4[Fe(CN)6]3 with ratio 4 Fe^3+ : 3 [Fe(CN)6]^4- instead.';
-                            }
-                            return { 
-                                success: false, 
-                                error: `Elements can balance as ${rStr} → ${pStr} but charges cannot: reactant charge ${reactantCharge}, product charge ${productCharge}.${suggestion}`,
-                                redoxAnalysis,
-                                diagnostic: {
-                                    type: 'CHARGE_IMBALANCE',
-                                    elementBalancedEquation: `${rStr} → ${pStr}`,
-                                    reactantCharge,
-                                    productCharge
-                                }
-                            };
-                        }
-                    }
-                }
+                fallbackResult = attemptChargeMismatchDiagnostic(reactants, products, redoxAnalysis, 'NO_VALID_VECTOR');
+                if (fallbackResult) return fallbackResult;
             }
-            return { 
-                success: false, 
-                error: 'Could not find integer solution.',
-                redoxAnalysis 
-            };
+            return { success: false, error: 'Could not find integer solution.', redoxAnalysis };
         }
         
         // Format result with preserved phases
