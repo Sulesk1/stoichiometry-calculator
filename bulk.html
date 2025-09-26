@@ -107,17 +107,11 @@
     if(running) return;
     reset();
     
-    // Auto-convert literal \n sequences and handle concatenated equations
+    // Auto-convert literal \n sequences 
     let rawInput = inputEl.value;
     
     // Convert literal \n to real newlines
     rawInput = rawInput.replace(/\\n/g, '\n');
-    
-    // If still one line but contains multiple arrows, auto-split
-    if (!/\n/.test(rawInput) && (rawInput.match(/->/g) || []).length > 1) {
-      // Split before each new equation (capital letter followed by reaction)
-      rawInput = rawInput.replace(/\s+(?=[A-Z][A-Za-z0-9()·^+\-]*[^->]*->)/g, '\n');
-    }
     
     const lines = rawInput.split(/\r?\n/);
     const equations = lines.filter(l=>l.trim().length>0);
