@@ -243,8 +243,8 @@ function parseChemicalEquation(equation) {
     // Normalize Unicode before parsing
     equation = normalizeChemInput(equation);
     
-    // Split on equation arrows (→, =, =>)
-    const arrowMatch = equation.match(/^(.*?)\s*(?:→|=>|=)\s*(.*)$/);
+    // Split on equation arrows (→, =>, ->, =)
+    const arrowMatch = equation.match(/^(.*?)\s*(?:→|=>|->|=)\s*(.*)$/);
     if (!arrowMatch) return null;
     
     const [, left, right] = arrowMatch;
@@ -268,9 +268,15 @@ function parseChemicalEquation(equation) {
 function parseEquationSide(sideString) {
     const species = [];
     
-    // Use regex to split on + with spaces (species separator)
-    // but not + immediately adjacent to species name (charge)
-    const tokens = sideString.split(/\s+\+\s+/);
+    // First attempt: split on + with spaces (clear separators)
+    let tokens = sideString.split(/\s+\+\s+/);
+
+    // If only one token found but string contains '+' not part of charge context, do a more permissive split
+    if (tokens.length === 1 && /\+/.test(sideString)) {
+        // Replace charge plus signs temporarily (e.g., Na+ -> Na§PLUS§) to avoid splitting them
+        const protectedStr = sideString.replace(/([A-Za-z0-9)\]])\+([^-0-9(]|$)/g, (m, before, after) => `${before}§PLUS§${after}`);
+        tokens = protectedStr.split(/\+/).map(t => t.replace(/§PLUS§/g, '+'));
+    }
     
     for (const token of tokens) {
         const parsed = parseSpeciesWithLeadingCoeff(token.trim());
@@ -1806,10 +1812,18 @@ class StoichiometryCalculator {
 
         // Set mode
         if (this.preferences.mode) {
-            const modeInput = document.querySelector(`input[name="calculation-mode"][value="${this.preferences.mode}"]`);
+            // Map legacy modes to new set
+            let storedMode = this.preferences.mode;
+            if (storedMode === 'balance' || storedMode === 'mass') {
+                storedMode = 'standard';
+            }
+            if (storedMode !== 'standard' && storedMode !== 'redox') {
+                storedMode = 'standard';
+            }
+            const modeInput = document.querySelector(`input[name="calculation-mode"][value="${storedMode}"]`);
             if (modeInput) {
                 modeInput.checked = true;
-                this.currentMode = this.preferences.mode;
+                this.currentMode = storedMode;
                 this.updateUIForMode();
             }
         }
