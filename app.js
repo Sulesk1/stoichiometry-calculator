@@ -255,6 +255,9 @@ function parseChemicalEquation(equation) {
     // Normalize Unicode before parsing
     equation = normalizeChemInput(equation);
     
+    // Normalize charge notation: MnO4- -> MnO4^-, Fe2+ -> Fe^2+
+    equation = equation.replace(/([A-Za-z0-9)\]]+)([0-9]*)([+-])/g, '$1^$2$3');
+    
     // Split on equation arrows (→, =>, ->, =)
     const arrowMatch = equation.match(/^(.*?)\s*(?:→|=>|->|=)\s*(.*)$/);
     if (!arrowMatch) return null;
@@ -786,9 +789,52 @@ function inferCounterIons(netDelta) {
     return suggestions;
 }
 
+// Detect common stoichiometry errors and suggest corrections
+function detectCommonStoichiometryErrors(reactants, products) {
+    const hints = [];
+    
+    // Check for missing subscripts in ionic compounds
+    const checkMissingSubscripts = (species, side) => {
+        for (const compound of species) {
+            const formula = compound.formula;
+            // Pattern: Metal + halide without proper subscript (e.g., CaCl should be CaCl2)
+            if (/^(Ca|Mg|Ba|Sr|Zn|Cd|Pb|Sn)(Cl|Br|I|F)$/.test(formula)) {
+                hints.push(`${formula} should likely be ${formula}2 (divalent metal + monovalent anion)`);
+            }
+            // Pattern: Metal + sulfate/carbonate without subscript
+            if (/^(Na|K|Li|Ag)(SO4|CO3|CrO4)$/.test(formula)) {
+                hints.push(`${formula} should likely be ${formula.charAt(0)}2${formula.slice(1)} (monovalent metal + divalent anion)`);
+            }
+        }
+    };
+    
+    checkMissingSubscripts(reactants, 'reactants');
+    checkMissingSubscripts(products, 'products');
+    
+    // Check for incomplete redox equations (missing H+, OH-, H2O)
+    const hasChargedSpecies = [...reactants, ...products].some(c => c.charge !== 0);
+    const hasRedoxIndicators = [...reactants, ...products].some(c => 
+        /MnO4|Cr2O7|NO3|ClO/.test(c.formula)
+    );
+    if (hasChargedSpecies && hasRedoxIndicators) {
+        const hasProton = [...reactants, ...products].some(c => c.formula === 'H' && c.charge === 1);
+        const hasWater = [...reactants, ...products].some(c => c.formula === 'H2O');
+        if (!hasProton && !hasWater) {
+            hints.push('Redox equations often need H+, OH-, or H2O for complete balance');
+        }
+    }
+    
+    return hints;
+}
+
 // Main balancing function with mode validation
 function balanceChemicalEquation(equation, mode = 'standard') {
     try {
+        // Handle 'no reaction' cases gracefully
+        if (/no\s+reaction/i.test(equation)) {
+            return { success: false, error: 'No reaction occurs under standard conditions.' };
+        }
+        
         const parsed = parseChemicalEquation(equation);
         if (!parsed) {
             return { success: false, error: 'Invalid equation format. Use = or → to separate reactants and products.' };
@@ -827,7 +873,13 @@ function balanceChemicalEquation(equation, mode = 'standard') {
                 fallbackResult = attemptChargeMismatchDiagnostic(reactants, products, redoxAnalysis, 'NO_NULLSPACE');
                 if (fallbackResult) return fallbackResult;
             }
-            return { success: false, error: 'No solution exists. Check if the equation is chemically valid.', redoxAnalysis };
+            // Enhanced error message with common chemistry hints
+            let errorMsg = 'No solution exists. Check if the equation is chemically valid.';
+            const commonHints = detectCommonStoichiometryErrors(reactants, products);
+            if (commonHints.length > 0) {
+                errorMsg += ' Hints: ' + commonHints.join('; ');
+            }
+            return { success: false, error: errorMsg, redoxAnalysis };
         }
         
         const coefficients = findBestIntegerSolution(nullspace, reactants.length);
