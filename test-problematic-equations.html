@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Problematic Equations</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .test { margin: 15px 0; padding: 15px; border: 1px solid #ccc; border-radius: 4px; }
+        .success { background: #d4edda; border-color: #c3e6cb; }
+        .error { background: #f8d7da; border-color: #f5c6cb; }
+        .suggestion { background: #e2e3e5; padding: 10px; margin-top: 10px; border-radius: 3px; }
+        .analysis { background: #f8f9fa; padding: 8px; margin: 5px 0; font-size: 0.9em; }
+    </style>
+</head>
+<body>
+    <h1>Test Problematic Equations</h1>
+    <p>Testing the three remaining failing equations with enhanced suggestions.</p>
+    
+    <div id="results"></div>
+
+    <script src="chem/fractions.js"></script>
+    <script src="chem/lexer.js"></script>
+    <script src="chem/linear.js"></script>
+    <script src="chem/parser.js"></script>
+    <script src="chem/balancer.js"></script>
+    <script src="chem/redox.js"></script>
+    <script src="chem/mass.js"></script>
+    <script src="chem/oxidation-states.js"></script>
+    <script src="app.js"></script>
+
+    <script>
+        const problematicEquations = [
+            {
+                id: 34,
+                eq: "ClO- + Fe+2 -> Cl- + Fe+3",
+                analysis: "ClO⁻ (Cl: +1) + Fe²⁺ → Cl⁻ (Cl: -1) + Fe³⁺. Cl gains 2e⁻, Fe loses 1e⁻. Need 2 Fe²⁺ per ClO⁻. Missing H⁺/H₂O.",
+                expected: "ClO⁻ + 2Fe²⁺ + 2H⁺ → Cl⁻ + 2Fe³⁺ + H₂O"
+            },
+            {
+                id: 35,
+                eq: "ClO- + S2- -> Cl- + S",
+                analysis: "ClO⁻ (Cl: +1) + S²⁻ → Cl⁻ (Cl: -1) + S (0). Both gain/lose 2e⁻. Should balance 1:1. May need OH⁻ in basic conditions.",
+                expected: "ClO⁻ + S²⁻ + H₂O → Cl⁻ + S + 2OH⁻"
+            },
+            {
+                id: 21,
+                eq: "HNO3 + S -> NO + H2SO4 + H2O",
+                analysis: "HNO₃ (N: +5) → NO (N: +2), gains 3e⁻. S (0) → H₂SO₄ (S: +6), loses 6e⁻. Need 2 HNO₃ per 1 S.",
+                expected: "2HNO₃ + S → 2NO + H₂SO₄"
+            }
+        ];
+
+        const resultsDiv = document.getElementById('results');
+
+        problematicEquations.forEach(({id, eq, analysis, expected}) => {
+            const testDiv = document.createElement('div');
+            testDiv.className = 'test';
+            
+            const result = window.balanceChemicalEquation(eq);
+            
+            let html = `<strong>Equation ${id}:</strong> ${eq}<br>`;
+            html += `<div class="analysis"><strong>Analysis:</strong> ${analysis}</div>`;
+            html += `<div class="analysis"><strong>Expected:</strong> ${expected}</div>`;
+            
+            if (result.success) {
+                testDiv.className += ' success';
+                html += `<div style="color: green; margin-top: 10px;"><strong>✓ SUCCESS:</strong> ${result.balanced}</div>`;
+            } else {
+                testDiv.className += ' error';
+                html += `<div style="color: red; margin-top: 10px;"><strong>✗ FAILED:</strong> ${result.error}</div>`;
+                
+                if (result.suggestions && result.suggestions.length > 0) {
+                    html += `<div class="suggestion">`;
+                    html += `<strong>${result.hint || 'Suggestions'}:</strong><br>`;
+                    result.suggestions.forEach((s, i) => {
+                        html += `${i + 1}. ${s}<br>`;
+                    });
+                    html += `</div>`;
+                }
+            }
+            
+            testDiv.innerHTML = html;
+            resultsDiv.appendChild(testDiv);
+        });
+    </script>
+</body>
+</html>

@@ -806,6 +806,34 @@ function inferCounterIons(netDelta) {
 function detectCommonStoichiometryErrors(reactants, products) {
     const hints = [];
     
+    // Check for specific incomplete redox patterns
+    const allFormulas = [...reactants, ...products].map(s => s.formula);
+    
+    // ClO- + Fe2+ missing H+/H2O (check for both ClO and Fe presence, different charges)
+    const hasClO = allFormulas.some(f => f === 'ClO');
+    const hasCl = allFormulas.some(f => f === 'Cl');
+    const hasFeReactant = reactants.some(r => r.formula === 'Fe' && r.charge === 2);
+    const hasFeProduct = products.some(p => p.formula === 'Fe' && p.charge === 3);
+    const hasH2O = allFormulas.some(f => f === 'H2O');
+    const hasHPlus = allFormulas.some(f => f === 'H' || (reactants.some(r => r.formula === 'H' && r.charge === 1)));
+    
+    if (hasClO && hasCl && hasFeReactant && hasFeProduct && !hasH2O && !hasHPlus) {
+        hints.push('ClO^- + Fe^2+ reaction needs H^+ and produces H2O: ClO^- + 2Fe^2+ + 2H^+ → Cl^- + 2Fe^3+ + H2O');
+    }
+    
+    // ClO- + S2- missing H2O/OH-
+    if (allFormulas.includes('ClO') && allFormulas.includes('S2') &&
+        allFormulas.includes('Cl') && allFormulas.includes('S') &&
+        !allFormulas.includes('H2O') && !allFormulas.includes('OH')) {
+        hints.push('ClO^- + S^2- reaction occurs in basic conditions: ClO^- + S^2- + H2O → Cl^- + S + 2OH^-');
+    }
+    
+    // HNO3 + S incomplete stoichiometry
+    if (allFormulas.includes('HNO3') && allFormulas.includes('S') &&
+        allFormulas.includes('NO') && allFormulas.includes('H2SO4')) {
+        hints.push('HNO3 + S needs proper stoichiometry: 2HNO3 + S → 2NO + H2SO4 (electron balance: 2×3e^- = 1×6e^-)');
+    }
+    
     // Check for missing subscripts in ionic compounds
     const checkMissingSubscripts = (species, side) => {
         for (const compound of species) {
@@ -827,7 +855,7 @@ function detectCommonStoichiometryErrors(reactants, products) {
     // Check for incomplete redox equations (missing H+, OH-, H2O)
     const hasChargedSpecies = [...reactants, ...products].some(c => c.charge !== 0);
     const hasRedoxIndicators = [...reactants, ...products].some(c => 
-        /MnO4|Cr2O7|NO3|ClO/.test(c.formula)
+        /MnO4|Cr2O7|NO3|ClO3|ClO|HNO3/.test(c.formula)
     );
     if (hasChargedSpecies && hasRedoxIndicators) {
         const hasProton = [...reactants, ...products].some(c => c.formula === 'H' && c.charge === 1);
@@ -885,6 +913,22 @@ function suggestRedoxCompletion(reactants, products) {
     // ClO3- + I- pattern
     if (rFormulas.includes('ClO3') && rFormulas.includes('I') && pFormulas.includes('Cl') && pFormulas.includes('I2')) {
         suggestions.push('ClO3^- + 6I^- + 6H+ → Cl^- + 3I2 + 3H2O');
+    }
+    
+    // ClO- + Fe2+ pattern (hypochlorite oxidation)
+    if (rFormulas.includes('ClO') && rFormulas.includes('Fe') && pFormulas.includes('Cl') && pFormulas.includes('Fe')) {
+        suggestions.push('ClO^- + 2Fe^2+ + 2H+ → Cl^- + 2Fe^3+ + H2O');
+    }
+    
+    // ClO- + S2- pattern (hypochlorite + sulfide)
+    if (rFormulas.includes('ClO') && rFormulas.includes('S2') && pFormulas.includes('Cl') && pFormulas.includes('S')) {
+        suggestions.push('ClO^- + S^2- + H2O → Cl^- + S + 2OH^-');
+    }
+    
+    // HNO3 + S pattern (nitric acid + sulfur)
+    if (rFormulas.includes('HNO3') && rFormulas.includes('S') && pFormulas.includes('NO') && pFormulas.includes('H2SO4')) {
+        suggestions.push('2HNO3 + S → 2NO + H2SO4');
+        suggestions.push('6HNO3 + S → 6NO2 + H2SO4 + 2H2O');
     }
     
     return suggestions;
