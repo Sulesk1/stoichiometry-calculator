@@ -309,12 +309,21 @@ input, button, textarea, select {
 
 .mode-option {
     display: flex;
-    align-items: center;
-    gap: 0.5rem;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.25rem;
     cursor: pointer;
-    padding: 0.5rem 0.75rem;
+    padding: 0.75rem;
     border-radius: var(--radius);
     transition: background-color 0.15s ease;
+    border: 1px solid var(--color-gray-200);
+    margin-bottom: 0.5rem;
+}
+
+.mode-option-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
 }
 
 .mode-option:hover {
@@ -327,7 +336,22 @@ input, button, textarea, select {
 
 .mode-text {
     font-size: 0.875rem;
+    font-weight: 500;
     color: var(--color-gray-700);
+}
+
+.mode-help {
+    font-size: 0.75rem;
+    color: var(--color-gray-600);
+    line-height: 1.4;
+    margin-top: 0.25rem;
+}
+
+.mode-help small {
+    display: block;
+    margin-top: 0.25rem;
+    font-style: italic;
+    color: var(--color-gray-500);
 }
 
 /* Buttons */

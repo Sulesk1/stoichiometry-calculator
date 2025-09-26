@@ -3,7 +3,53 @@
  * Handles UI interactions, calculator integration, and user experience
  */
 
-// Fraction class for exact arithmetic
+// Unicode normalization for chemical formulas
+function normalizeChemInput(s) {
+    if (!s) return s;
+    
+    // Unicode subscript mappings (₀-₉)
+    const subMap = { 
+        '₀':'0','₁':'1','₂':'2','₃':'3','₄':'4',
+        '₅':'5','₆':'6','₇':'7','₈':'8','₉':'9' 
+    };
+    
+    // Unicode superscript mappings (⁰-⁹⁺⁻)
+    const supMap = { 
+        '⁰':'0','¹':'1','²':'2','³':'3','⁴':'4',
+        '⁵':'5','⁶':'6','⁷':'7','⁸':'8','⁹':'9',
+        '⁺':'+','⁻':'-' 
+    };
+    
+        return s
+        .replace(/[₀-₉]/g, c => subMap[c])        // subscripts → digits
+        .replace(/[⁰-⁹⁺⁻]/g, c => supMap[c])      // superscripts → digits/signs
+        .replace(/[·•]/g, '.')                    // hydrate dot(s)
+        .replace(/[−–]/g, '-')                    // minus variants
+        .replace(/\s+/g, ' ')                     // collapse whitespace
+        .trim();
+}
+
+// Validate equation based on selected mode
+function validateEquationForMode(reactants, products, mode) {
+    const allSpecies = [...reactants, ...products];
+    
+    if (mode === 'standard') {
+        // Standard mode: only neutral molecules allowed
+        const chargedSpecies = allSpecies.filter(species => species.charge && species.charge !== 0);
+        if (chargedSpecies.length > 0) {
+            const examples = chargedSpecies.slice(0, 2).map(s => s.formula + (s.charge > 0 ? '+' : s.charge < 0 ? '-' : '')).join(', ');
+            return {
+                valid: false,
+                error: `Charges aren't supported in Standard mode. Found: ${examples}. Switch to Redox mode to balance ionic equations.`
+            };
+        }
+    } else if (mode === 'redox') {
+        // Redox mode: charges are allowed and expected for ionic equations
+        // No specific validation needed here - charge balance will be enforced in matrix
+    }
+    
+    return { valid: true };
+}// Fraction class for exact arithmetic
 class Fraction {
     constructor(num, den = 1) {
         if (den === 0) throw new Error('Division by zero');
@@ -149,37 +195,64 @@ function parseChemicalFormula(formula) {
 
 // Strip leading stoichiometric coefficients and parse formula
 function parseSpeciesWithLeadingCoeff(speciesString) {
-    const trimmed = speciesString.trim();
+    const trimmed = normalizeChemInput(speciesString.trim());
     
     // Match optional leading coefficient followed by formula
-    const match = trimmed.match(/^(\d+)?\s*([A-Za-z(\[].*)$/);
+    const coeffMatch = trimmed.match(/^(\d+)?\s*(.+)$/);
+    if (!coeffMatch) return null;
     
-    if (match) {
-        const userCoeff = match[1] ? parseInt(match[1]) : 1;
-        const formulaPart = match[2];
+    const userCoeff = coeffMatch[1] ? parseInt(coeffMatch[1]) : 1;
+    let formulaPart = coeffMatch[2];
+    
+    // Extract charge from the end of the formula
+    // Matches: Fe3+, Fe^3+, SO4^2-, [Fe(CN)6]^4-, Cl-, etc.
+    const chargeMatch = formulaPart.match(/^(.+?)(?:\^?([+-]?\d+|[+-]))$/);
+    
+    let formula = formulaPart;
+    let charge = 0;
+    
+    if (chargeMatch) {
+        formula = chargeMatch[1];
+        const chargeStr = chargeMatch[2];
         
-        // Parse the formula part (without leading coefficient)
-        const parsed = parseChemicalFormula(formulaPart);
-        if (parsed) {
-            // Ignore user coefficient - let the balancer determine correct coefficients
-            // Store the user's attempted coefficient for reference if needed
-            parsed.userInputCoefficient = userCoeff;
-            return parsed;
+        // Parse charge string
+        if (chargeStr === '+' || chargeStr === '-') {
+            charge = chargeStr === '+' ? 1 : -1;
+        } else {
+            charge = parseInt(chargeStr);
         }
     }
     
-    // Fallback to original parsing (handles cases like H2O, Ca(OH)2)
-    return parseChemicalFormula(trimmed);
+    // Parse the neutral formula part
+    const parsed = parseChemicalFormula(formula);
+    if (parsed) {
+        // Add charge information
+        parsed.charge = charge;
+        
+        // Ignore user coefficient - let the balancer determine correct coefficients
+        // Store the user's attempted coefficient for reference if needed
+        parsed.userInputCoefficient = userCoeff;
+        return parsed;
+    }
+    
+    return null;
 }
 
-// Parse equation into reactants and products with spectator cancellation
+// Parse equation into reactants and products with charge-aware tokenization
 function parseChemicalEquation(equation) {
-    const [left, right] = equation.split(/[=→]/);
+    // Normalize Unicode before parsing
+    equation = normalizeChemInput(equation);
+    
+    // Split on equation arrows (→, =, =>)
+    const arrowMatch = equation.match(/^(.*?)\s*(?:→|=>|=)\s*(.*)$/);
+    if (!arrowMatch) return null;
+    
+    const [, left, right] = arrowMatch;
     if (!left || !right) return null;
     
-    // Parse each side, handling leading coefficients like "2O2"
-    let reactants = left.split('+').map(s => parseSpeciesWithLeadingCoeff(s)).filter(r => r);
-    let products = right.split('+').map(s => parseSpeciesWithLeadingCoeff(s)).filter(p => p);
+    // Parse each side using charge-aware tokenization
+    let reactants = parseEquationSide(left).filter(r => r);
+    let products = parseEquationSide(right).filter(p => p);
     
     // Merge duplicates and cancel spectators
     const simplified = cancelSpectatorsAndMergeDuplicates(reactants, products);
@@ -189,6 +262,24 @@ function parseChemicalEquation(equation) {
         products: simplified.products,
         canceledSpectators: simplified.canceledSpectators
     };
+}
+
+// Parse one side of equation with charge-aware tokenization
+function parseEquationSide(sideString) {
+    const species = [];
+    
+    // Use regex to split on + with spaces (species separator)
+    // but not + immediately adjacent to species name (charge)
+    const tokens = sideString.split(/\s+\+\s+/);
+    
+    for (const token of tokens) {
+        const parsed = parseSpeciesWithLeadingCoeff(token.trim());
+        if (parsed) {
+            species.push(parsed);
+        }
+    }
+    
+    return species;
 }
 
 // Cancel spectator species and merge duplicate entries
@@ -429,53 +520,110 @@ function findBestIntegerSolution(nullspaceBasis, numReactants) {
     let bestSolution = null;
     let bestScore = Infinity;
     
-    // Try each basis vector
+    // First try single basis vectors (original approach)
     nullspaceBasis.forEach(originalBasis => {
         // Try both the original vector and its negation
         const candidateVectors = [originalBasis, originalBasis.map(f => f.multiply(new Fraction(-1)))];
         
         for (const basis of candidateVectors) {
-            // Convert to integers first to check signs properly
-            const integers = convertToIntegers(basis);
-            if (!integers) continue;
-            
-            // Strict validation: ALL reactants must be > 0 AND ALL products must be > 0
-            let allReactantsPositive = true;
-            let allProductsPositive = true;
-            
-            // Check reactants (indices 0 to numReactants-1)
-            for (let i = 0; i < numReactants; i++) {
-                if (integers[i] <= 0) {
-                    allReactantsPositive = false;
-                    break;
-                }
-            }
-            
-            // Check products (indices numReactants to end)
-            for (let i = numReactants; i < integers.length; i++) {
-                if (integers[i] <= 0) {
-                    allProductsPositive = false;
-                    break;
-                }
-            }
-            
-            // Only accept candidates where all coefficients are positive on their respective sides
-            if (allReactantsPositive && allProductsPositive) {
-                const maxCoeff = Math.max(...integers);
-                const sumCoeff = integers.reduce((a, b) => a + b, 0);
-                const score = maxCoeff * 1000 + sumCoeff; // Prefer smaller max, then smaller sum
-                
-                if (score < bestScore) {
-                    bestScore = score;
-                    bestSolution = integers;
-                }
-                
-                // Found a valid candidate, no need to try negation
-                break;
+            const solution = evaluateNullspaceSolution(basis, numReactants);
+            if (solution && solution.score < bestScore) {
+                bestScore = solution.score;
+                bestSolution = solution.coefficients;
             }
         }
     });
     
+    // If no single vector works, try small integer combinations
+    if (!bestSolution && nullspaceBasis.length > 1) {
+        bestSolution = searchIntegerCombinations(nullspaceBasis, numReactants);
+    }
+    
+    return bestSolution;
+}
+
+// Evaluate a nullspace solution vector
+function evaluateNullspaceSolution(basis, numReactants) {
+    // Convert to integers first to check signs properly
+    const integers = convertToIntegers(basis);
+    if (!integers) return null;
+    
+    // Strict validation: ALL reactants must be > 0 AND ALL products must be > 0
+    let allReactantsPositive = true;
+    let allProductsPositive = true;
+    
+    // Check reactants (indices 0 to numReactants-1)
+    for (let i = 0; i < numReactants; i++) {
+        if (integers[i] <= 0) {
+            allReactantsPositive = false;
+            break;
+        }
+    }
+    
+    // Check products (indices numReactants to end)
+    for (let i = numReactants; i < integers.length; i++) {
+        if (integers[i] <= 0) {
+            allProductsPositive = false;
+            break;
+        }
+    }
+    
+    // Only accept candidates where all coefficients are positive on their respective sides
+    if (allReactantsPositive && allProductsPositive) {
+        const maxCoeff = Math.max(...integers);
+        const sumCoeff = integers.reduce((a, b) => a + b, 0);
+        const score = maxCoeff * 1000 + sumCoeff; // Prefer smaller max, then smaller sum
+        
+        return { coefficients: integers, score };
+    }
+    
+    return null;
+}
+
+// Search for integer combinations of basis vectors
+function searchIntegerCombinations(nullspaceBasis, numReactants) {
+    let bestSolution = null;
+    let bestScore = Infinity;
+    
+    const maxWeight = 3; // Try weights from -3 to 3
+    const numBasis = Math.min(nullspaceBasis.length, 3); // Limit to first 3 basis vectors for performance
+    
+    // Generate all combinations of small integer weights
+    function generateWeights(depth, currentWeights) {
+        if (depth === numBasis) {
+            // Skip the all-zeros combination
+            if (currentWeights.every(w => w === 0)) return;
+            
+            // Compute linear combination
+            let combined = nullspaceBasis[0].map(() => new Fraction(0));
+            for (let i = 0; i < numBasis; i++) {
+                const weight = new Fraction(currentWeights[i]);
+                for (let j = 0; j < combined.length; j++) {
+                    combined[j] = combined[j].add(nullspaceBasis[i][j].multiply(weight));
+                }
+            }
+            
+            // Try both this combination and its negation
+            const candidates = [combined, combined.map(f => f.multiply(new Fraction(-1)))];
+            
+            for (const candidate of candidates) {
+                const solution = evaluateNullspaceSolution(candidate, numReactants);
+                if (solution && solution.score < bestScore) {
+                    bestScore = solution.score;
+                    bestSolution = solution.coefficients;
+                }
+            }
+            return;
+        }
+        
+        // Try all weights for current basis vector
+        for (let weight = -maxWeight; weight <= maxWeight; weight++) {
+            currentWeights[depth] = weight;
+            generateWeights(depth + 1, currentWeights);
+        }
+    }
+    
+    generateWeights(0, new Array(numBasis));
     return bestSolution;
 }
 
@@ -519,8 +667,8 @@ function lcmTwo(a, b) {
     return Math.abs(a * b) / gcdTwo(a, b);
 }
 
-// Main balancing function with redox analysis
-function balanceChemicalEquation(equation, isRedoxMode = false) {
+// Main balancing function with mode validation
+function balanceChemicalEquation(equation, mode = 'standard') {
     try {
         const parsed = parseChemicalEquation(equation);
         if (!parsed) {
@@ -529,13 +677,19 @@ function balanceChemicalEquation(equation, isRedoxMode = false) {
         
         const { reactants, products } = parsed;
         
+        // Validate mode-specific constraints
+        const validation = validateEquationForMode(reactants, products, mode);
+        if (!validation.valid) {
+            return { success: false, error: validation.error };
+        }
+        
         // Analyze oxidation states to detect true redox
         const osEngine = new OxidationStateEngine();
         const redoxAnalysis = osEngine.analyzeRedoxReaction(reactants, products);
         const isActuallyRedox = redoxAnalysis.isRedox;
         
-        // Use redox balancing if it's actually a redox reaction
-        const useChargeBalance = isRedoxMode || isActuallyRedox;
+        // Use charge balance in Redox mode
+        const useChargeBalance = mode === 'redox';
         const { matrix, elements, compounds } = buildBalanceMatrix(reactants, products, useChargeBalance);
         
         const nullspace = computeNullspace(matrix);
@@ -596,7 +750,7 @@ function balanceChemicalEquation(equation, isRedoxMode = false) {
 class StoichiometryCalculator {
     constructor() {
         this.currentEquation = null;
-        this.currentMode = 'balance';
+        this.currentMode = 'standard';
         
         this.init();
         this.setupEventListeners();
@@ -864,23 +1018,40 @@ class StoichiometryCalculator {
      * Update UI based on selected mode
      */
     updateUIForMode() {
-        const redoxSection = document.querySelector('.redox-options');
-        const stoichSection = document.querySelector('.stoich-section');
+        // Currently only Standard and Redox modes are supported
+        // Additional UI elements can be shown/hidden based on mode if needed
         
-        switch (this.currentMode) {
-            case 'balance':
-                if (redoxSection) redoxSection.style.display = 'none';
-                if (stoichSection) stoichSection.style.display = 'block';
-                break;
-            case 'redox':
-                if (redoxSection) redoxSection.style.display = 'block';
-                if (stoichSection) stoichSection.style.display = 'block';
-                break;
-            case 'mass':
-                if (redoxSection) redoxSection.style.display = 'none';
-                if (stoichSection) stoichSection.style.display = 'none';
-                break;
+        // Update input placeholder based on mode
+        const input = document.getElementById('equation-input');
+        if (input) {
+            if (this.currentMode === 'redox') {
+                input.placeholder = "Fe²⁺ + Cr₂O₇²⁻ + H⁺ → Fe³⁺ + Cr³⁺ + H₂O";
+            } else {
+                input.placeholder = "C₃H₈ + O₂ → CO₂ + H₂O";
+            }
         }
+        
+        // Update examples based on mode
+        this.updateExamplesForMode();
+    }
+    
+    /**
+     * Update examples dropdown based on mode
+     */
+    updateExamplesForMode() {
+        const exampleItems = document.querySelectorAll('[data-example]');
+        exampleItems.forEach(item => {
+            const example = item.getAttribute('data-example');
+            const isRedox = ['redox-acidic', 'redox-basic'].includes(example);
+            
+            if (this.currentMode === 'standard' && isRedox) {
+                item.style.display = 'none';
+            } else if (this.currentMode === 'redox' && !isRedox && example !== 'combustion') {
+                item.style.display = 'none';
+            } else {
+                item.style.display = 'block';
+            }
+        });
     }
 
     /**
@@ -934,8 +1105,7 @@ class StoichiometryCalculator {
      */
     async balanceEquation(equation) {
         try {
-            const isRedox = this.currentMode === 'redox';
-            const result = balanceChemicalEquation(equation, isRedox);
+            const result = balanceChemicalEquation(equation, this.currentMode);
             
             if (result.success) {
                 // Add coefficient information for display

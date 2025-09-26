@@ -241,16 +241,21 @@
                         <div class="mode-group" role="radiogroup" aria-labelledby="mode-label">
                             <span id="mode-label" class="mode-label">Balancing Mode</span>
                             <label class="mode-option">
-                                <input type="radio" name="mode" value="standard" checked aria-describedby="standard-help">
-                                <span class="mode-text">Standard</span>
+                                <div class="mode-option-header">
+                                    <input type="radio" name="calculation-mode" value="standard" checked aria-describedby="standard-help">
+                                    <span class="mode-text">Standard</span>
+                                </div>
+                                <div id="standard-help" class="mode-help">Balance neutral molecules only</div>
                             </label>
                             <label class="mode-option">
-                                <input type="radio" name="mode" value="acidic" aria-describedby="acidic-help">
-                                <span class="mode-text">Redox (Acidic)</span>
-                            </label>
-                            <label class="mode-option">
-                                <input type="radio" name="mode" value="basic" aria-describedby="basic-help">
-                                <span class="mode-text">Redox (Basic)</span>
+                                <div class="mode-option-header">
+                                    <input type="radio" name="calculation-mode" value="redox" aria-describedby="redox-help">
+                                    <span class="mode-text">Redox</span>
+                                </div>
+                                <div id="redox-help" class="mode-help">
+                                    Balance ionic equations with charges
+                                    <small>Tip: Use + right after species (Fe²⁺), + with spaces to separate</small>
+                                </div>
                             </label>
                         </div>
                         
