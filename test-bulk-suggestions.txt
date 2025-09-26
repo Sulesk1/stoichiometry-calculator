@@ -1,0 +1,10 @@
+MnO4 + Fe → Mn + Fe
+Cr2O7 + Fe → Cr + Fe  
+MnO4 + I → Mn + I2
+MnO4 + C2O4 → Mn + CO2
+Cr2O7 + H2S → Cr + S
+NO3 + Cu → NO + Cu
+ClO3 + I → Cl + I2
+H2 + O2 → H2O
+Ca + Cl2 → CaCl2
+Random invalid equation → Nothing

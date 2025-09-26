@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Charge Parsing Fix</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .test { margin: 10px 0; padding: 10px; border: 1px solid #ccc; }
+        .success { background: #d4edda; }
+        .error { background: #f8d7da; }
+        .suggestion { background: #e2e3e5; margin-top: 5px; padding: 5px; }
+    </style>
+</head>
+<body>
+    <h1>Test Charge Parsing Fixes</h1>
+    <div id="results"></div>
+
+    <script src="chem/fractions.js"></script>
+    <script src="chem/lexer.js"></script>
+    <script src="chem/linear.js"></script>
+    <script src="chem/parser.js"></script>
+    <script src="chem/balancer.js"></script>
+    <script src="chem/redox.js"></script>
+    <script src="chem/mass.js"></script>
+    <script src="chem/oxidation-states.js"></script>
+    <script src="app.js"></script>
+
+    <script>
+        const failingEquations = [
+            "MnO4- + Fe+2 + H+ -> Mn+2 + Fe+3 + H2O",
+            "Cr2O7-2 + Fe+2 + H+ -> Cr+3 + Fe+3 + H2O",
+            "MnO4- + C2O4-2 + H+ -> Mn+2 + CO2 + H2O",
+            "Cr2O7-2 + H2S + H+ -> Cr+3 + S + H2O",
+            "NO3- + Cu + H+ -> NO + Cu+2 + H2O"
+        ];
+
+        const resultsDiv = document.getElementById('results');
+
+        failingEquations.forEach((equation, index) => {
+            const testDiv = document.createElement('div');
+            testDiv.className = 'test';
+            
+            console.log(`Testing equation ${index + 1}: ${equation}`);
+            
+            const result = window.balanceChemicalEquation(equation);
+            
+            let html = `<strong>Test ${index + 1}:</strong> ${equation}<br>`;
+            
+            if (result.success) {
+                testDiv.className += ' success';
+                html += `<span style="color: green;">✓ Success:</span> ${result.balanced}`;
+            } else {
+                testDiv.className += ' error';
+                html += `<span style="color: red;">✗ Error:</span> ${result.error}`;
+                
+                if (result.suggestions && result.suggestions.length > 0) {
+                    html += `<div class="suggestion">`;
+                    html += `<strong>${result.hint || 'Suggestions'}:</strong><br>`;
+                    result.suggestions.forEach((s, i) => {
+                        html += `${i + 1}. ${s}<br>`;
+                    });
+                    html += `</div>`;
+                }
+            }
+            
+            testDiv.innerHTML = html;
+            resultsDiv.appendChild(testDiv);
+        });
+    </script>
+</body>
+</html>

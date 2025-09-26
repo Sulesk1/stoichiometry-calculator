@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Auto-Mode Detection</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .test { margin: 10px 0; padding: 10px; border: 1px solid #ccc; }
+        .success { background: #d4edda; border-color: #c3e6cb; }
+        .error { background: #f8d7da; border-color: #f5c6cb; }
+        .mode-info { font-style: italic; color: #666; }
+    </style>
+</head>
+<body>
+    <h1>Test Auto-Mode Detection Fix</h1>
+    <p>These equations should now auto-upgrade from 'standard' to 'redox' mode and balance correctly.</p>
+    <div id="results"></div>
+
+    <script src="chem/fractions.js"></script>
+    <script src="chem/lexer.js"></script>
+    <script src="chem/linear.js"></script>
+    <script src="chem/parser.js"></script>
+    <script src="chem/balancer.js"></script>
+    <script src="chem/redox.js"></script>
+    <script src="chem/mass.js"></script>
+    <script src="chem/oxidation-states.js"></script>
+    <script src="app.js"></script>
+
+    <script>
+        const testEquations = [
+            "MnO4- + Fe+2 + H+ -> Mn+2 + Fe+3 + H2O",
+            "Cr2O7-2 + Fe+2 + H+ -> Cr+3 + Fe+3 + H2O",
+            "MnO4- + I- + H+ -> Mn+2 + I2 + H2O", 
+            "MnO4- + C2O4-2 + H+ -> Mn+2 + CO2 + H2O",
+            "NO3- + Cu + H+ -> NO + Cu+2 + H2O",
+            "H2 + O2 -> H2O"  // This should stay in standard mode
+        ];
+
+        const resultsDiv = document.getElementById('results');
+
+        testEquations.forEach((equation, index) => {
+            const testDiv = document.createElement('div');
+            testDiv.className = 'test';
+            
+            // Test with default 'standard' mode (should auto-detect redox if needed)
+            const result = window.balanceChemicalEquation(equation);
+            
+            let html = `<strong>Test ${index + 1}:</strong> ${equation}<br>`;
+            html += `<div class="mode-info">Mode: standard (auto-detect enabled)</div>`;
+            
+            if (result.success) {
+                testDiv.className += ' success';
+                html += `<span style="color: green;">✓ Success:</span> ${result.balanced}`;
+                if (result.redoxAnalysis && result.redoxAnalysis.isRedox) {
+                    html += `<br><small>Detected as redox reaction</small>`;
+                }
+            } else {
+                testDiv.className += ' error';
+                html += `<span style="color: red;">✗ Error:</span> ${result.error}`;
+                
+                if (result.suggestions && result.suggestions.length > 0) {
+                    html += `<div style="margin-top: 5px; padding: 5px; background: #e2e3e5;">`;
+                    html += `<strong>${result.hint || 'Suggestions'}:</strong><br>`;
+                    result.suggestions.forEach((s, i) => {
+                        html += `${i + 1}. ${s}<br>`;
+                    });
+                    html += `</div>`;
+                }
+            }
+            
+            testDiv.innerHTML = html;
+            resultsDiv.appendChild(testDiv);
+        });
+    </script>
+</body>
+</html>

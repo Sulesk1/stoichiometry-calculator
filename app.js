@@ -255,8 +255,21 @@ function parseChemicalEquation(equation) {
     // Normalize Unicode before parsing
     equation = normalizeChemInput(equation);
     
-    // Normalize charge notation: MnO4- -> MnO4^-, Fe2+ -> Fe^2+
-    equation = equation.replace(/([A-Za-z0-9)\]]+)([0-9]*)([+-])/g, '$1^$2$3');
+    // Comprehensive charge notation normalization
+    // Handle cases like: MnO4-, Fe+2, Cr2O7-2, SO4-2, etc.
+    equation = equation
+        // Pattern 1: Species ending with charge (MnO4-, SO4-2)
+        .replace(/([A-Za-z0-9)\]]+)([+-])([0-9]*)/g, (match, species, sign, charge) => {
+            const chargeNum = charge || '1';
+            return species + '^' + sign + chargeNum;
+        })
+        // Pattern 2: Already normalized charges (keep as-is)
+        .replace(/\^\^/g, '^')  // Remove double ^ if any
+        // Pattern 3: Handle edge cases with parentheses
+        .replace(/(\([^)]+\))([+-])([0-9]*)/g, (match, species, sign, charge) => {
+            const chargeNum = charge || '1';
+            return species + '^' + sign + chargeNum;
+        });
     
     // Split on equation arrows (→, =>, ->, =)
     const arrowMatch = equation.match(/^(.*?)\s*(?:→|=>|->|=)\s*(.*)$/);
@@ -877,7 +890,7 @@ function suggestRedoxCompletion(reactants, products) {
     return suggestions;
 }
 
-// Main balancing function with mode validation
+// Main balancing function with mode validation and auto-detection
 function balanceChemicalEquation(equation, mode = 'standard') {
     try {
         // Handle 'no reaction' cases gracefully
@@ -892,7 +905,15 @@ function balanceChemicalEquation(equation, mode = 'standard') {
         
         const { reactants, products } = parsed;
         
-        // Validate mode-specific constraints
+        // Auto-detect redox equations: if charges are present but mode is 'standard', upgrade to 'redox'
+        const allSpecies = [...reactants, ...products];
+        const hasChargedSpecies = allSpecies.some(species => species.charge && species.charge !== 0);
+        
+        if (hasChargedSpecies && mode === 'standard') {
+            mode = 'redox'; // Auto-upgrade to redox mode
+        }
+        
+        // Validate mode-specific constraints (now with proper mode)
         const validation = validateEquationForMode(reactants, products, mode);
         if (!validation.valid) {
             return { success: false, error: validation.error };

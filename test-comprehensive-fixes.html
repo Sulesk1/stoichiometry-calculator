@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Comprehensive Fix Validation</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .test { margin: 10px 0; padding: 10px; border: 1px solid #ccc; border-radius: 4px; }
+        .success { background: #d4edda; border-color: #c3e6cb; }
+        .error { background: #f8d7da; border-color: #f5c6cb; }
+        .warning { background: #fff3cd; border-color: #ffeaa7; }
+        .equation { font-family: monospace; }
+        .result { margin-top: 5px; }
+        .suggestion { background: #e2e3e5; padding: 5px; margin-top: 5px; border-radius: 3px; }
+        .stats { background: #f8f9fa; padding: 10px; margin: 20px 0; border-radius: 4px; }
+    </style>
+</head>
+<body>
+    <h1>Comprehensive Fix Validation</h1>
+    <p>Testing the complete fix: charge parsing + auto-mode detection + matrix balancing</p>
+    
+    <div class="stats" id="stats"></div>
+    <div id="results"></div>
+
+    <script src="chem/fractions.js"></script>
+    <script src="chem/lexer.js"></script>
+    <script src="chem/linear.js"></script>
+    <script src="chem/parser.js"></script>
+    <script src="chem/balancer.js"></script>
+    <script src="chem/redox.js"></script>
+    <script src="chem/mass.js"></script>
+    <script src="chem/oxidation-states.js"></script>
+    <script src="app.js"></script>
+
+    <script>
+        // Test cases from user's failing list
+        const testCases = [
+            { eq: "MnO4- + Fe+2 + H+ -> Mn+2 + Fe+3 + H2O", expected: "balanced" },
+            { eq: "Cr2O7-2 + Fe+2 + H+ -> Cr+3 + Fe+3 + H2O", expected: "balanced" },
+            { eq: "MnO4- + I- + H+ -> Mn+2 + I2 + H2O", expected: "balanced" },
+            { eq: "MnO4- + C2O4-2 + H+ -> Mn+2 + CO2 + H2O", expected: "balanced" },
+            { eq: "Cr2O7-2 + H2S + H+ -> Cr+3 + S + H2O", expected: "balanced" },
+            { eq: "NO3- + Cu + H+ -> NO + Cu+2 + H2O", expected: "balanced" },
+            { eq: "H2O2 + Fe+2 + H+ -> Fe+3 + H2O", expected: "balanced" },
+            { eq: "Cl2 + Fe+2 -> Cl- + Fe+3", expected: "balanced" },
+            { eq: "Br2 + Fe+2 -> Br- + Fe+3", expected: "balanced" },
+            { eq: "Ce+4 + Fe+2 -> Ce+3 + Fe+3", expected: "balanced" },
+            { eq: "H2 + O2 -> H2O", expected: "balanced" },  // Standard mode test
+            { eq: "Invalid equation -> Nothing", expected: "error" }  // Should fail gracefully
+        ];
+
+        const resultsDiv = document.getElementById('results');
+        const statsDiv = document.getElementById('stats');
+        
+        let successCount = 0;
+        let totalCount = testCases.length;
+
+        testCases.forEach((testCase, index) => {
+            const testDiv = document.createElement('div');
+            testDiv.className = 'test';
+            
+            console.log(`Testing ${index + 1}: ${testCase.eq}`);
+            
+            const startTime = performance.now();
+            const result = window.balanceChemicalEquation(testCase.eq);
+            const endTime = performance.now();
+            const timeMs = (endTime - startTime).toFixed(1);
+            
+            let html = `<strong>Test ${index + 1}:</strong><br>`;
+            html += `<div class="equation">${testCase.eq}</div>`;
+            html += `<div class="result">`;
+            
+            const isSuccess = result.success;
+            const expectedSuccess = testCase.expected === "balanced";
+            
+            if (isSuccess && expectedSuccess) {
+                testDiv.className += ' success';
+                html += `<span style="color: green;">✓ SUCCESS:</span> ${result.balanced}`;
+                html += `<br><small>Time: ${timeMs}ms</small>`;
+                successCount++;
+            } else if (!isSuccess && !expectedSuccess) {
+                testDiv.className += ' warning';
+                html += `<span style="color: orange;">⚠ EXPECTED ERROR:</span> ${result.error}`;
+                html += `<br><small>Time: ${timeMs}ms</small>`;
+                successCount++; // Expected failure counts as success
+            } else {
+                testDiv.className += ' error';
+                html += `<span style="color: red;">✗ ${isSuccess ? 'UNEXPECTED SUCCESS' : 'UNEXPECTED FAILURE'}:</span> ${result.error || result.balanced}`;
+                html += `<br><small>Time: ${timeMs}ms</small>`;
+            }
+            
+            // Add suggestions if available
+            if (!isSuccess && result.suggestions && result.suggestions.length > 0) {
+                html += `<div class="suggestion">`;
+                html += `<strong>${result.hint || 'Suggestions'}:</strong><br>`;
+                result.suggestions.forEach((s, i) => {
+                    html += `${i + 1}. ${s}<br>`;
+                });
+                html += `</div>`;
+            }
+            
+            html += `</div>`;
+            testDiv.innerHTML = html;
+            resultsDiv.appendChild(testDiv);
+        });
+        
+        // Update stats
+        const successRate = ((successCount / totalCount) * 100).toFixed(1);
+        statsDiv.innerHTML = `
+            <strong>Results Summary:</strong><br>
+            Successful: ${successCount}/${totalCount} (${successRate}%)<br>
+            ${successCount === totalCount ? 
+                '🎉 All tests passed! The fixes are working correctly.' : 
+                `⚠ ${totalCount - successCount} tests failed. Check individual results below.`}
+        `;
+    </script>
+</body>
+</html>

@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Suggestion System</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .test-case { margin: 20px 0; padding: 10px; border: 1px solid #ccc; }
+        .error { color: red; }
+        .suggestion { color: blue; background: #f0f0f0; padding: 5px; margin-top: 5px; }
+    </style>
+</head>
+<body>
+    <h1>Test Suggestion System</h1>
+    <div id="results"></div>
+
+    <script src="chem/fractions.js"></script>
+    <script src="chem/lexer.js"></script>
+    <script src="chem/linear.js"></script>
+    <script src="chem/parser.js"></script>
+    <script src="chem/balancer.js"></script>
+    <script src="chem/redox.js"></script>
+    <script src="chem/mass.js"></script>
+    <script src="chem/oxidation-states.js"></script>
+    <script src="app.js"></script>
+
+    <script>
+        const testCases = [
+            "MnO4 + Fe → Mn + Fe", // Incomplete - missing charges, H+, H2O
+            "Cr2O7 + Fe → Cr + Fe", // Incomplete - missing charges, H+, H2O  
+            "MnO4 + I → Mn + I2", // Incomplete - missing charges, H+, H2O
+            "MnO4 + C2O4 → Mn + CO2", // Incomplete - missing charges, H+, H2O
+            "Cr2O7 + H2S → Cr + S", // Incomplete - missing charges, H+, H2O
+            "NO3 + Cu → NO + Cu", // Incomplete - missing charges, H+, H2O
+            "ClO3 + I → Cl + I2", // Incomplete - missing charges, H+, H2O
+            "MnO4^- + 5Fe^2+ + 8H+ → Mn^2+ + 5Fe^3+ + 4H2O", // Complete - should balance
+            "Random equation with no pattern → No suggestion"
+        ];
+
+        const resultsDiv = document.getElementById('results');
+
+        testCases.forEach((equation, index) => {
+            const testDiv = document.createElement('div');
+            testDiv.className = 'test-case';
+            
+            const result = window.balanceChemicalEquation(equation);
+            
+            let html = `<strong>Test ${index + 1}:</strong> ${equation}<br>`;
+            
+            if (result.success) {
+                html += `<span style="color: green;">✓ Success:</span> ${result.balanced}`;
+            } else {
+                html += `<span class="error">✗ Error:</span> ${result.error}`;
+                
+                if (result.suggestions && result.suggestions.length > 0) {
+                    html += `<div class="suggestion">`;
+                    html += `<strong>${result.hint || 'Suggestions'}:</strong><br>`;
+                    result.suggestions.forEach((s, i) => {
+                        html += `${i + 1}. ${s}<br>`;
+                    });
+                    html += `</div>`;
+                }
+            }
+            
+            testDiv.innerHTML = html;
+            resultsDiv.appendChild(testDiv);
+        });
+    </script>
+</body>
+</html>
