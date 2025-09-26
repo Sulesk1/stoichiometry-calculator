@@ -708,9 +708,18 @@ function balanceChemicalEquation(equation, mode = 'standard') {
             return { success: false, error: validation.error };
         }
         
-        // Analyze oxidation states to detect true redox
-        const osEngine = new OxidationStateEngine();
-        const redoxAnalysis = osEngine.analyzeRedoxReaction(reactants, products);
+        // Analyze oxidation states to detect true redox (robust + guarded)
+        let redoxAnalysis = { isRedox: false };
+        try {
+            // Skip complex coordination species for OS detection to avoid crashes (e.g., brackets or multiple metals)
+            const hasComplex = [...reactants, ...products].some(s => /\[|\].*[A-Z].*\[/.test(s.originalFormula || s.formula) || /\[/.test(s.formula));
+            if (!hasComplex) {
+                const osEngine = new OxidationStateEngine();
+                redoxAnalysis = osEngine.analyzeRedoxReaction(reactants, products);
+            }
+        } catch (e) {
+            redoxAnalysis = { isRedox: false, error: 'Redox analysis skipped: ' + e.message };
+        }
         const isActuallyRedox = redoxAnalysis.isRedox;
         
         // Use charge balance in Redox mode
