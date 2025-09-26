@@ -117,15 +117,48 @@ class Fraction {
 function parseChemicalFormula(formula) {
     // Extract coefficient and check for phase notation
     const match = formula.match(/^(\d*)\s*(.+?)(\([slgaq]+\))?$/);
+    if (!match) return null;
     const coefficient = match[1] ? parseInt(match[1]) : 1;
-    const compound = match[2];
+    const compoundRaw = match[2];
     const phaseMatch = match[3];
     const phase = phaseMatch ? phaseMatch.slice(1, -1) : null; // Remove parentheses
-    
-    const composition = {};
+
+    // Split hydrate parts at '.' (already normalized from · / •)
+    const hydrateParts = compoundRaw.split('.');
+    const totalComposition = {};
+    let netCharge = 0;
+
+    for (const part of hydrateParts) {
+        if (!part) continue;
+        // Allow leading multiplier per part (e.g., 5H2O)
+        const partMatch = part.match(/^(\d+)?(.*)$/);
+        if (!partMatch) continue;
+        const partMultiplier = partMatch[1] ? parseInt(partMatch[1]) : 1;
+        const partFormula = partMatch[2];
+
+        // Parse one contiguous (possibly bracketed) complex formula segment
+        const { composition: segmentComp, charge: segmentCharge } = parseSingleCompoundCore(partFormula);
+        if (!segmentComp) continue;
+        for (const [el, cnt] of Object.entries(segmentComp)) {
+            totalComposition[el] = (totalComposition[el] || 0) + cnt * partMultiplier;
+        }
+        netCharge += segmentCharge * partMultiplier;
+    }
+
+    return {
+        formula: compoundRaw,
+        originalFormula: formula,
+        coefficient,
+        composition: totalComposition,
+        charge: netCharge,
+        phase
+    };
+}
+
+// Parse a single compound core (no hydrate splitting) allowing (), [] nesting
+function parseSingleCompoundCore(compound) {
+    const elementsAccumulator = {};
     let charge = 0;
-    
-    // Parse compound recursively
     let index = 0;
     
     function parseGroup() {
@@ -134,18 +167,18 @@ function parseChemicalFormula(formula) {
         while (index < compound.length) {
             const char = compound[index];
             
-            if (char === '(') {
+            if (char === '(' || char === '[') {
                 index++; // skip '('
                 const groupElements = parseGroup();
-                if (compound[index] === ')') {
-                    index++; // skip ')'
+                if ((char === '(' && compound[index] === ')') || (char === '[' && compound[index] === ']')) {
+                    index++; // skip closing
                     const multiplier = parseNumber() || 1;
                     
                     for (const [element, count] of Object.entries(groupElements)) {
                         elements[element] = (elements[element] || 0) + count * multiplier;
                     }
                 }
-            } else if (char === ')') {
+            } else if (char === ')' || char === ']') {
                 break;
             } else if (char >= 'A' && char <= 'Z') {
                 const element = parseElement();
@@ -182,15 +215,10 @@ function parseChemicalFormula(formula) {
     }
     
     const parsed = parseGroup();
-    
-    return {
-        formula: compound,
-        originalFormula: formula,
-        coefficient: coefficient,
-        composition: parsed,
-        charge: charge,
-        phase: phase
-    };
+    for (const [el, cnt] of Object.entries(parsed)) {
+        elementsAccumulator[el] = (elementsAccumulator[el] || 0) + cnt;
+    }
+    return { composition: elementsAccumulator, charge };
 }
 
 // Strip leading stoichiometric coefficients and parse formula
@@ -362,6 +390,13 @@ function mergeDuplicates(species) {
 
 // Build matrix A for balancing
 function buildBalanceMatrix(reactants, products, includeCharge = false) {
+    // Validate that every compound has a composition object
+    const allCompoundsRaw = [...reactants, ...products];
+    for (const c of allCompoundsRaw) {
+        if (!c || !c.composition || Object.keys(c.composition).length === 0) {
+            throw new Error(`Parse failure for species: ${c && c.originalFormula ? c.originalFormula : 'UNKNOWN'}`);
+        }
+    }
     const allCompounds = [...reactants, ...products];
     const elements = new Set();
     let hasCharge = false;
