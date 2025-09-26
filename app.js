@@ -728,6 +728,49 @@ function balanceChemicalEquation(equation, mode = 'standard') {
         
         const nullspace = computeNullspace(matrix);
         if (!nullspace) {
+            // Attempt diagnostic: is the equation element-balanced but charge-imbalanced?
+            if (useChargeBalance) {
+                const elementOnly = buildBalanceMatrix(reactants, products, false);
+                const nullspaceElementOnly = computeNullspace(elementOnly.matrix);
+                if (nullspaceElementOnly) {
+                    const coeffsElementOnly = findBestIntegerSolution(nullspaceElementOnly, reactants.length);
+                    if (coeffsElementOnly) {
+                        // Compute net charges
+                        const reactantCharge = reactants.reduce((sum, c, i) => sum + (c.charge || 0) * coeffsElementOnly[i], 0);
+                        const productCharge = products.reduce((sum, c, i) => sum + (c.charge || 0) * coeffsElementOnly[reactants.length + i], 0);
+                        if (reactantCharge !== productCharge) {
+                            // Build pretty element-only balanced string
+                            const rStr = reactants.map((c, i) => {
+                                const k = coeffsElementOnly[i];
+                                const phase = c.phase ? `(${c.phase})` : '';
+                                return (k > 1 ? k + ' ' : '') + c.formula + phase;
+                            }).join(' + ');
+                            const pStr = products.map((c, i) => {
+                                const k = coeffsElementOnly[reactants.length + i];
+                                const phase = c.phase ? `(${c.phase})` : '';
+                                return (k > 1 ? k + ' ' : '') + c.formula + phase;
+                            }).join(' + ');
+                            let suggestion = '';
+                            // Heuristic suggestion for common Prussian blue style mismatch
+                            const productFormulas = products.map(p => p.formula);
+                            if (productFormulas.some(f => /Fe\[Fe\(CN\)6\]/.test(f))) {
+                                suggestion = ' Known related neutral precipitate: 4 Fe^3+ + 3 [Fe(CN)6]^4- → Fe4[Fe(CN)6]3.';
+                            }
+                            return {
+                                success: false,
+                                error: `Equation cannot be balanced under charge conservation. Elements balance as: ${rStr} → ${pStr} but net charge differs (reactants ${reactantCharge}, products ${productCharge}).${suggestion} The written equation is missing additional ions or incorrect stoichiometry.`,
+                                redoxAnalysis,
+                                diagnostic: {
+                                    type: 'CHARGE_IMBALANCE',
+                                    elementBalancedEquation: `${rStr} → ${pStr}`,
+                                    reactantCharge,
+                                    productCharge
+                                }
+                            };
+                        }
+                    }
+                }
+            }
             return { 
                 success: false, 
                 error: 'No solution exists. Check if the equation is chemically valid.',
@@ -737,6 +780,46 @@ function balanceChemicalEquation(equation, mode = 'standard') {
         
         const coefficients = findBestIntegerSolution(nullspace, reactants.length);
         if (!coefficients) {
+            // Same diagnostic fallback if nullspace basis exists but no valid all-positive vector
+            if (useChargeBalance) {
+                const elementOnly = buildBalanceMatrix(reactants, products, false);
+                const nullspaceElementOnly = computeNullspace(elementOnly.matrix);
+                if (nullspaceElementOnly) {
+                    const coeffsElementOnly = findBestIntegerSolution(nullspaceElementOnly, reactants.length);
+                    if (coeffsElementOnly) {
+                        const reactantCharge = reactants.reduce((sum, c, i) => sum + (c.charge || 0) * coeffsElementOnly[i], 0);
+                        const productCharge = products.reduce((sum, c, i) => sum + (c.charge || 0) * coeffsElementOnly[reactants.length + i], 0);
+                        if (reactantCharge !== productCharge) {
+                            const rStr = reactants.map((c, i) => {
+                                const k = coeffsElementOnly[i];
+                                const phase = c.phase ? `(${c.phase})` : '';
+                                return (k > 1 ? k + ' ' : '') + c.formula + phase;
+                            }).join(' + ');
+                            const pStr = products.map((c, i) => {
+                                const k = coeffsElementOnly[reactants.length + i];
+                                const phase = c.phase ? `(${c.phase})` : '';
+                                return (k > 1 ? k + ' ' : '') + c.formula + phase;
+                            }).join(' + ');
+                            let suggestion = '';
+                            const productFormulas = products.map(p => p.formula);
+                            if (productFormulas.some(f => /Fe\[Fe\(CN\)6\]/.test(f))) {
+                                suggestion = ' Consider Fe4[Fe(CN)6]3 with ratio 4 Fe^3+ : 3 [Fe(CN)6]^4- instead.';
+                            }
+                            return { 
+                                success: false, 
+                                error: `Elements can balance as ${rStr} → ${pStr} but charges cannot: reactant charge ${reactantCharge}, product charge ${productCharge}.${suggestion}`,
+                                redoxAnalysis,
+                                diagnostic: {
+                                    type: 'CHARGE_IMBALANCE',
+                                    elementBalancedEquation: `${rStr} → ${pStr}`,
+                                    reactantCharge,
+                                    productCharge
+                                }
+                            };
+                        }
+                    }
+                }
+            }
             return { 
                 success: false, 
                 error: 'Could not find integer solution.',
