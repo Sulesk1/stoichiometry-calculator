@@ -2068,3 +2068,64 @@ function extractCharge(input) {
     
     return { core: core.trim(), charge };
 }
+
+// Expose core balancer globally for external / batch usage
+if (typeof window !== 'undefined') {
+    window.balanceChemicalEquation = balanceChemicalEquation;
+}
+
+// Batch processing utility: run many equations with incremental yielding
+function runBatchBalance(equations, options = {}) {
+    const {
+        mode = 'standard',
+        chunkSize = 50,
+        onProgress = null,
+        onComplete = null,
+        includeDiagnostics = true
+    } = options;
+    const results = [];
+    const start = performance.now();
+    let index = 0;
+    function processChunk() {
+        const chunkStart = performance.now();
+        for (let c = 0; c < chunkSize && index < equations.length; c++, index++) {
+            const eq = equations[index].trim();
+            if (!eq) {
+                results.push({ input: eq, skipped: true });
+                continue;
+            }
+            let result;
+            try {
+                result = balanceChemicalEquation(eq, mode);
+            } catch (e) {
+                result = { success: false, error: 'Runtime error: ' + e.message };
+            }
+            const entry = {
+                input: eq,
+                success: result.success,
+                balanced: result.success ? result.balanced : null,
+                error: result.success ? null : result.error,
+                timeMs: +(performance.now() - chunkStart).toFixed(3)
+            };
+            if (includeDiagnostics && result && !result.success && result.diagnostic) {
+                entry.diagnostic = result.diagnostic;
+            }
+            results.push(entry);
+        }
+        if (onProgress) {
+            onProgress({ processed: index, total: equations.length, results });
+        }
+        if (index < equations.length) {
+            setTimeout(processChunk, 0); // yield
+        } else {
+            const totalMs = performance.now() - start;
+            if (onComplete) onComplete({ results, totalMs });
+        }
+    }
+    processChunk();
+    return results; // returns immediately; results will fill asynchronously
+}
+
+if (typeof window !== 'undefined') {
+    window.runBatchBalance = runBatchBalance;
+}

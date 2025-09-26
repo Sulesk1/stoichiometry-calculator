@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Bulk Equation Balancer | Stoichiometry Calculator</title>
+<meta name="robots" content="noindex" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<link rel="stylesheet" href="styles.css" />
+<style>
+  body { max-width: 1200px; margin: 0 auto; padding: 1rem; }
+  textarea { width: 100%; min-height: 220px; font-family: monospace; resize: vertical; }
+  .controls { display: flex; flex-wrap: wrap; gap: .75rem; align-items: center; }
+  .results-table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+  .results-table th, .results-table td { border: 1px solid #ccc; padding: 4px 6px; vertical-align: top; }
+  .status-bar { margin-top: .75rem; font-size: .85rem; }
+  .tag { display:inline-block; padding:2px 6px; border-radius:4px; background:#eef; margin-right:4px; font-size:.7rem; }
+  .success { background:#e7f9ed; }
+  .fail { background:#ffecec; }
+  .sticky-actions { position: sticky; top:0; background:#fff; padding:.5rem 0; }
+  .small-btn { font-size:.75rem; padding:.25rem .5rem; }
+  .nowrap { white-space: nowrap; }
+  .truncate { max-width:340px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+</style>
+</head>
+<body>
+  <h1>Bulk Equation Balancer</h1>
+  <p>Paste one equation per line. Supports standard and redox modes. Processing is chunked to keep the UI responsive.</p>
+
+  <div class="controls">
+    <label>Mode:
+      <select id="bulk-mode">
+        <option value="standard">Standard</option>
+        <option value="redox">Redox</option>
+      </select>
+    </label>
+    <label>Chunk size:
+      <input type="number" id="chunk-size" value="50" min="1" max="1000" />
+    </label>
+    <button id="run-bulk">Run Batch</button>
+    <button id="clear-results" type="button">Clear</button>
+    <button id="download-json" class="small-btn" type="button" disabled>Download JSON</button>
+    <button id="download-csv" class="small-btn" type="button" disabled>Download CSV</button>
+  </div>
+
+  <textarea id="bulk-input" placeholder="Examples:\nC3H8 + O2 -> CO2 + H2O\nFe + O2 -> Fe2O3\n[Fe(CN)6]^4- + Fe^3+ -> Fe4[Fe(CN)6]3\n..."></textarea>
+
+  <div class="status-bar" id="bulk-status">Idle</div>
+
+  <div class="sticky-actions">
+    <strong>Results</strong> (<span id="bulk-count">0</span>)
+  </div>
+  <table class="results-table" id="bulk-table" aria-describedby="bulk-status">
+    <thead>
+      <tr>
+        <th>#</th>
+        <th class="nowrap">Input</th>
+        <th>Balanced / Error</th>
+        <th>Diag</th>
+        <th class="nowrap">Time (ms)</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+<script src="fraction.js"></script>
+<script src="chem/parser.js"></script>
+<script src="chem/mass.js"></script>
+<script src="chem/oxidation-states.js"></script>
+<script src="app.js"></script>
+<script>
+(function(){
+  const inputEl = document.getElementById('bulk-input');
+  const modeEl = document.getElementById('bulk-mode');
+  const runBtn = document.getElementById('run-bulk');
+  const statusEl = document.getElementById('bulk-status');
+  const tableBody = document.querySelector('#bulk-table tbody');
+  const countEl = document.getElementById('bulk-count');
+  const chunkEl = document.getElementById('chunk-size');
+  const jsonBtn = document.getElementById('download-json');
+  const csvBtn = document.getElementById('download-csv');
+  const clearBtn = document.getElementById('clear-results');
+  let currentResults = [];
+  let running = false;
+
+  function reset(){
+    tableBody.innerHTML='';
+    countEl.textContent='0';
+    currentResults=[];
+    jsonBtn.disabled = true;
+    csvBtn.disabled = true;
+  }
+  clearBtn.addEventListener('click', ()=>{ if(running) return; reset(); statusEl.textContent='Cleared'; });
+
+  function addRow(entry, index){
+    const tr = document.createElement('tr');
+    tr.className = entry.success ? 'success' : (entry.error ? 'fail' : '');
+    const diag = entry.diagnostic ? entry.diagnostic.type : '';
+    tr.innerHTML = `<td>${index+1}</td>`+
+      `<td class="truncate" title="${entry.input.replace(/\"/g,'&quot;')}">${entry.input}</td>`+
+      `<td>${entry.success ? entry.balanced : `<span style='color:#b00'>${entry.error}</span>`}</td>`+
+      `<td>${diag || ''}</td>`+
+      `<td>${entry.timeMs ?? ''}</td>`;
+    tableBody.appendChild(tr);
+  }
+
+  function run(){
+    if(running) return;
+    reset();
+    const lines = inputEl.value.split(/\r?\n/);
+    const equations = lines.filter(l=>l.trim().length>0);
+    if(!equations.length){ statusEl.textContent='No equations provided'; return; }
+    running = true; runBtn.disabled = true; statusEl.textContent='Starting...';
+
+    const chunkSize = Math.max(1, Math.min(1000, parseInt(chunkEl.value)||50));
+    const start = performance.now();
+    window.runBatchBalance(equations, {
+      mode: modeEl.value,
+      chunkSize,
+      onProgress: ({processed, total, results}) => {
+        // append only new rows
+        for(let i = currentResults.length; i < results.length; i++) addRow(results[i], i);
+        currentResults = results.slice();
+        countEl.textContent = processed;
+        statusEl.textContent = `Processed ${processed}/${total} (${((processed/total)*100).toFixed(1)}%)`;
+      },
+      onComplete: ({results, totalMs}) => {
+        running = false; runBtn.disabled = false;
+        statusEl.textContent = `Done: ${results.length} equations in ${totalMs.toFixed(1)} ms (avg ${(totalMs/results.length).toFixed(2)} ms/eq)`;
+        jsonBtn.disabled = false; csvBtn.disabled = false;
+      }
+    });
+  }
+
+  runBtn.addEventListener('click', run);
+
+  function download(filename, text){
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([text], {type: 'text/plain'}));
+    a.download = filename; a.click();
+    setTimeout(()=>URL.revokeObjectURL(a.href), 500);
+  }
+
+  jsonBtn.addEventListener('click', ()=>{
+    if(!currentResults.length) return;
+    download('bulk-results.json', JSON.stringify(currentResults, null, 2));
+  });
+
+  csvBtn.addEventListener('click', ()=>{
+    if(!currentResults.length) return;
+    const header = ['index','input','success','balanced','error','diagnostic','timeMs'];
+    const lines = [header.join(',')];
+    currentResults.forEach((r,i)=>{
+      const diag = r.diagnostic ? r.diagnostic.type : '';
+      const row = [i+1, r.input, r.success, safe(r.balanced), safe(r.error), diag, r.timeMs];
+      lines.push(row.map(v=>`"${(v??'').toString().replace(/"/g,'""')}"`).join(','));
+    });
+    download('bulk-results.csv', lines.join('\n'));
+  });
+
+  function safe(v){ return (v||'').toString().replace(/\n/g,' '); }
+})();
+</script>
+</body>
+</html>
