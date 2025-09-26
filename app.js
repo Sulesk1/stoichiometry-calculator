@@ -204,24 +204,8 @@ function parseSpeciesWithLeadingCoeff(speciesString) {
     const userCoeff = coeffMatch[1] ? parseInt(coeffMatch[1]) : 1;
     let formulaPart = coeffMatch[2];
     
-    // Extract charge from the end of the formula
-    // Matches: Fe3+, Fe^3+, SO4^2-, [Fe(CN)6]^4-, Cl-, etc.
-    const chargeMatch = formulaPart.match(/^(.+?)(?:\^?([+-]?\d+|[+-]))$/);
-    
-    let formula = formulaPart;
-    let charge = 0;
-    
-    if (chargeMatch) {
-        formula = chargeMatch[1];
-        const chargeStr = chargeMatch[2];
-        
-        // Parse charge string
-        if (chargeStr === '+' || chargeStr === '-') {
-            charge = chargeStr === '+' ? 1 : -1;
-        } else {
-            charge = parseInt(chargeStr);
-        }
-    }
+    // Robust charge extraction
+    const { core: formula, charge } = extractCharge(formulaPart);
     
     // Parse the neutral formula part
     const parsed = parseChemicalFormula(formula);
@@ -1877,4 +1861,70 @@ window.addEventListener('unhandledrejection', (event) => {
 // Export for testing
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = { StoichiometryCalculator };
+}
+
+// Extract terminal charge token from a species string.
+// Recognizes patterns (after normalization):
+//   Fe3+, Fe+3, Fe^3+, Fe^+3, Fe2-, Fe^2-, Fe- , Fe+
+//   SO4^2-, SO4^2+, SO4--, SO4++, Cl-, Cl+
+// Rules:
+//   1. A charge token must end the string.
+//   2. Must contain at least one + or - sign (cannot be just trailing digits).
+//   3. Optional leading caret '^'.
+//   4. Digits may appear before or after the first sign, but not both sides (normalize to magnitude).
+function extractCharge(input) {
+    let core = input;
+    let charge = 0;
+    
+    // Quick reject: no + or - at end
+    if (!/[+-]$/.test(input)) {
+        return { core, charge };
+    }
+    
+    // Possible charge segment after the last element/paren/closing bracket
+    // Capture optional caret, digits/sign order variations.
+    const chargeRegex = /(.*?)(?:\^)?((?:\d+[+-]|[+-]\d+|[+-]{1,2}|\d*[+-]))$/;
+    const m = input.match(chargeRegex);
+    if (!m) return { core, charge };
+    
+    const candidateCore = m[1];
+    const token = m[2];
+    
+    // Ensure core is not empty and still has a letter or bracket (avoid classifying whole string as charge)
+    if (!/[A-Za-z\]]/.test(candidateCore)) return { core, charge };
+    
+    // Token must contain at least one sign
+    if (!/[+-]/.test(token)) return { core, charge };
+    
+    // Normalize token forms
+    let magnitude = 1;
+    let sign = 0;
+    
+    // Patterns:
+    //  digits+sign  (e.g., 2+  -> +2)
+    //  sign+digits  (e.g., +2  -> +2)
+    //  sign(s) only (e.g., ++  -> +2, -  -> -1)
+    //  digits*sign (digits optional) handled above
+    if (/^\d+[+-]$/.test(token)) {
+        magnitude = parseInt(token.slice(0, -1));
+        sign = token.endsWith('+') ? 1 : -1;
+    } else if (/^[+-]\d+$/.test(token)) {
+        sign = token[0] === '+' ? 1 : -1;
+        magnitude = parseInt(token.slice(1));
+    } else if (/^[+-]{1,2}$/.test(token)) {
+        // Single or double signs like +, -, ++, --
+        sign = token[0] === '+' ? 1 : -1;
+        magnitude = token.length; // ++ -> 2, -- -> 2
+    } else if (/^\d*[+-]$/.test(token)) { // fallback digits optional then sign
+        const digits = token.slice(0, -1);
+        if (digits) magnitude = parseInt(digits);
+        sign = token.endsWith('+') ? 1 : -1;
+    } else {
+        return { core, charge };
+    }
+    
+    charge = sign * magnitude;
+    core = candidateCore;
+    
+    return { core: core.trim(), charge };
 }
