@@ -95,9 +95,24 @@
     const tr = document.createElement('tr');
     tr.className = entry.success ? 'success' : (entry.error ? 'fail' : '');
     const diag = entry.diagnostic ? entry.diagnostic.type : '';
+    
+    // Format result cell
+    let resultContent;
+    if (entry.success) {
+      resultContent = entry.balanced;
+    } else {
+      let errorHtml = `<span style='color:#b00'>${entry.error}</span>`;
+      // Add suggestions if available
+      if (entry.suggestions && entry.suggestions.length > 0) {
+        const suggestionsList = entry.suggestions.map((s, i) => `${i + 1}. ${s}`).join('<br>');
+        errorHtml += `<br><small style='color:#666'><strong>${entry.hint || 'Suggestions'}:</strong><br>${suggestionsList}</small>`;
+      }
+      resultContent = errorHtml;
+    }
+    
     tr.innerHTML = `<td>${index+1}</td>`+
       `<td class="truncate" title="${entry.input.replace(/\"/g,'&quot;')}">${entry.input}</td>`+
-      `<td>${entry.success ? entry.balanced : `<span style='color:#b00'>${entry.error}</span>`}</td>`+
+      `<td>${resultContent}</td>`+
       `<td>${diag || ''}</td>`+
       `<td>${entry.timeMs ?? ''}</td>`;
     tableBody.appendChild(tr);

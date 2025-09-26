@@ -822,9 +822,59 @@ function detectCommonStoichiometryErrors(reactants, products) {
         if (!hasProton && !hasWater) {
             hints.push('Redox equations often need H+, OH-, or H2O for complete balance');
         }
+        
+        // Suggest common redox completions
+        const completionSuggestions = suggestRedoxCompletion(reactants, products);
+        if (completionSuggestions.length > 0) {
+            hints.push('Try: ' + completionSuggestions.join(' or '));
+        }
     }
     
     return hints;
+}
+
+// Suggest proper redox equation completion based on common patterns
+function suggestRedoxCompletion(reactants, products) {
+    const suggestions = [];
+    const rFormulas = reactants.map(r => r.formula);
+    const pFormulas = products.map(p => p.formula);
+    
+    // MnO4- + Fe2+ pattern
+    if (rFormulas.includes('MnO4') && rFormulas.includes('Fe') && pFormulas.includes('Mn') && pFormulas.includes('Fe')) {
+        suggestions.push('MnO4^- + 5Fe^2+ + 8H+ → Mn^2+ + 5Fe^3+ + 4H2O');
+    }
+    
+    // Cr2O7^2- + Fe2+ pattern  
+    if (rFormulas.includes('Cr2O7') && rFormulas.includes('Fe') && pFormulas.includes('Cr') && pFormulas.includes('Fe')) {
+        suggestions.push('Cr2O7^2- + 6Fe^2+ + 14H+ → 2Cr^3+ + 6Fe^3+ + 7H2O');
+    }
+    
+    // MnO4- + I- pattern
+    if (rFormulas.includes('MnO4') && rFormulas.includes('I') && pFormulas.includes('Mn') && pFormulas.includes('I2')) {
+        suggestions.push('2MnO4^- + 10I^- + 16H+ → 2Mn^2+ + 5I2 + 8H2O');
+    }
+    
+    // MnO4- + C2O4^2- pattern
+    if (rFormulas.includes('MnO4') && rFormulas.includes('C2O4') && pFormulas.includes('Mn') && pFormulas.includes('CO2')) {
+        suggestions.push('2MnO4^- + 5C2O4^2- + 16H+ → 2Mn^2+ + 10CO2 + 8H2O');
+    }
+    
+    // Cr2O7^2- + H2S pattern
+    if (rFormulas.includes('Cr2O7') && rFormulas.includes('H2S') && pFormulas.includes('Cr') && pFormulas.includes('S')) {
+        suggestions.push('Cr2O7^2- + 3H2S + 8H+ → 2Cr^3+ + 3S + 7H2O');
+    }
+    
+    // NO3- + Cu pattern
+    if (rFormulas.includes('NO3') && rFormulas.includes('Cu') && pFormulas.includes('NO') && pFormulas.includes('Cu')) {
+        suggestions.push('2NO3^- + 3Cu + 8H+ → 2NO + 3Cu^2+ + 4H2O');
+    }
+    
+    // ClO3- + I- pattern
+    if (rFormulas.includes('ClO3') && rFormulas.includes('I') && pFormulas.includes('Cl') && pFormulas.includes('I2')) {
+        suggestions.push('ClO3^- + 6I^- + 6H+ → Cl^- + 3I2 + 3H2O');
+    }
+    
+    return suggestions;
 }
 
 // Main balancing function with mode validation
@@ -922,6 +972,29 @@ function balanceChemicalEquation(equation, mode = 'standard') {
         };
         
     } catch (error) {
+        // Try to provide redox completion suggestions for incomplete equations
+        if (equation.includes('+') && equation.includes('→')) {
+            try {
+                const parts = equation.split('→');
+                if (parts.length === 2) {
+                    const reactants = parseSpeciesList(parts[0]);
+                    const products = parseSpeciesList(parts[1]);
+                    const suggestions = suggestRedoxCompletion(reactants, products);
+                    
+                    if (suggestions.length > 0) {
+                        return {
+                            success: false,
+                            error: `Balancing error: ${error.message}`,
+                            suggestions: suggestions,
+                            hint: 'Try this complete redox equation:'
+                        };
+                    }
+                }
+            } catch (suggestionError) {
+                // Silently continue if suggestion fails
+            }
+        }
+        
         return { success: false, error: `Balancing error: ${error.message}` };
     }
 }
@@ -1269,7 +1342,15 @@ class StoichiometryCalculator {
                 this.showSuccess('Equation balanced successfully!');
                 this.announce('Equation balanced successfully');
             } else {
-                this.showError(result.error || 'Failed to balance equation.');
+                let errorMessage = result.error || 'Failed to balance equation.';
+                
+                // Display suggestions if available
+                if (result.suggestions && result.suggestions.length > 0) {
+                    errorMessage += '\n\n' + (result.hint || 'Suggestions:') + '\n' + 
+                                   result.suggestions.map((s, i) => `${i + 1}. ${s}`).join('\n');
+                }
+                
+                this.showError(errorMessage);
                 this.announce('Balancing failed: ' + (result.error || 'Unknown error'));
             }
         } catch (error) {
@@ -1919,6 +2000,17 @@ class StoichiometryCalculator {
     }
 
     /**
+     * Escape HTML entities
+     * @param {string} text
+     * @returns {string}
+     */
+    escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    /**
      * Show status message
      * @param {string} message
      * @param {string} type
@@ -1929,7 +2021,14 @@ class StoichiometryCalculator {
 
         const messageDiv = document.createElement('div');
         messageDiv.className = `status-message status-${type}`;
-        messageDiv.textContent = message;
+        // Handle multi-line messages by preserving line breaks
+        if (message.includes('\n')) {
+            messageDiv.innerHTML = message.split('\n').map(line => 
+                line.trim() ? `<div>${this.escapeHtml(line)}</div>` : '<br>'
+            ).join('');
+        } else {
+            messageDiv.textContent = message;
+        }
         messageDiv.setAttribute('role', 'alert');
 
         // Clear previous messages of the same type
