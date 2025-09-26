@@ -489,11 +489,17 @@ class StoichiometryCalculator {
             clearBtn.addEventListener('click', this.handleClear.bind(this));
         }
 
-        // Example button
-        const exampleBtn = document.getElementById('example-btn');
-        if (exampleBtn) {
-            exampleBtn.addEventListener('click', this.handleExample.bind(this));
+        // Examples dropdown button
+        const examplesBtn = document.getElementById('examples-btn');
+        if (examplesBtn) {
+            examplesBtn.addEventListener('click', this.handleExamplesToggle.bind(this));
         }
+
+        // Example menu items
+        const exampleItems = document.querySelectorAll('[data-example]');
+        exampleItems.forEach(item => {
+            item.addEventListener('click', this.handleExampleSelect.bind(this));
+        });
 
         // Copy result button
         const copyBtn = document.getElementById('copy-btn');
@@ -843,22 +849,78 @@ class StoichiometryCalculator {
         const detailsContainer = document.querySelector('.details-content');
         if (!detailsContainer) return;
 
-        let detailsHTML = '';
+        let detailsHTML = '<div class="calculation-explanation">';
+        
+        // Basic balancing explanation
+        detailsHTML += `
+            <h4>🧮 Balancing Method</h4>
+            <p>This equation was balanced using <strong>matrix nullspace analysis</strong>:</p>
+            <ol>
+                <li><strong>Parse</strong>: Extract all elements from each compound</li>
+                <li><strong>Matrix</strong>: Build element balance equations (Ax = 0)</li>
+                <li><strong>Solve</strong>: Find rational nullspace using Gaussian elimination</li>
+                <li><strong>Scale</strong>: Convert to smallest positive integer coefficients</li>
+            </ol>
+        `;
 
-        if (result.matrix) {
+        // Show element analysis
+        if (result.reactants && result.products) {
+            const allCompounds = [...result.reactants, ...result.products];
+            const elements = new Set();
+            
+            allCompounds.forEach(compound => {
+                Object.keys(compound.composition).forEach(element => {
+                    elements.add(element);
+                });
+            });
+
             detailsHTML += `
-                <h4>Matrix Representation:</h4>
-                <div class="matrix-display">${this.formatMatrix(result.matrix)}</div>
+                <h4>🔬 Element Analysis</h4>
+                <p><strong>Elements present:</strong> ${Array.from(elements).join(', ')}</p>
+                <p><strong>Compounds:</strong> ${allCompounds.length} total (${result.reactants.length} reactants, ${result.products.length} products)</p>
             `;
         }
 
-        if (result.details) {
+        // Show coefficients breakdown
+        if (result.coefficients) {
             detailsHTML += `
-                <h4>Solution Details:</h4>
-                <pre class="matrix-display">${result.details}</pre>
+                <h4>⚖️ Coefficient Breakdown</h4>
+                <div class="coefficients-grid">
+            `;
+            
+            const allCompounds = [...(result.reactants || []), ...(result.products || [])];
+            result.coefficients.forEach((coeff, index) => {
+                const compound = allCompounds[index];
+                const isReactant = index < (result.reactants?.length || 0);
+                detailsHTML += `
+                    <div class="coeff-item">
+                        <span class="coeff-number">${coeff}</span>
+                        <span class="coeff-formula">${compound?.formula || 'Unknown'}</span>
+                        <span class="coeff-role">${isReactant ? 'reactant' : 'product'}</span>
+                    </div>
+                `;
+            });
+            
+            detailsHTML += '</div>';
+        }
+
+        // Redox explanation if applicable
+        if (this.currentMode === 'redox') {
+            detailsHTML += `
+                <h4>⚡ Redox Balancing</h4>
+                <p>For redox equations, charge balance is included as an additional constraint.</p>
+                <p>The algorithm automatically balances both mass and charge conservation.</p>
             `;
         }
 
+        detailsHTML += `
+            <div class="method-note">
+                <p><strong>Note:</strong> This uses exact rational arithmetic (no floating-point errors) 
+                and guaranteed mathematical correctness through linear algebra.</p>
+            </div>
+        `;
+        
+        detailsHTML += '</div>';
         detailsContainer.innerHTML = detailsHTML;
     }
 
@@ -1009,6 +1071,60 @@ class StoichiometryCalculator {
         const equationInput = document.getElementById('equation-input');
         if (equationInput && !equationInput.value.trim()) {
             equationInput.placeholder = 'Enter equation (e.g., C2H6 + O2 = CO2 + H2O) or click Example';
+        }
+    }
+
+    /**
+     * Handle examples dropdown toggle
+     */
+    handleExamplesToggle() {
+        const examplesBtn = document.getElementById('examples-btn');
+        const dropdown = examplesBtn?.parentElement;
+        const menu = dropdown?.querySelector('.dropdown-menu');
+        
+        if (dropdown && menu) {
+            const isOpen = dropdown.classList.contains('open');
+            if (isOpen) {
+                dropdown.classList.remove('open');
+                examplesBtn.setAttribute('aria-expanded', 'false');
+            } else {
+                dropdown.classList.add('open');
+                examplesBtn.setAttribute('aria-expanded', 'true');
+            }
+        }
+    }
+
+    /**
+     * Handle example selection from dropdown
+     */
+    handleExampleSelect(e) {
+        const exampleType = e.target.getAttribute('data-example');
+        const examples = {
+            'combustion': 'C3H8 + O2 = CO2 + H2O',
+            'redox-acidic': 'MnO4- + Fe2+ + H+ = Mn2+ + Fe3+ + H2O',
+            'redox-basic': 'MnO4- + I- = MnO2 + I2',
+            'hydrate': 'CuSO4·5H2O + NH3 = Cu(NH3)4SO4 + H2O',
+            'isotope': '[13C]6H12O6 + O2 = 13CO2 + H2O',
+            'complex': 'K2Cr2O7 + HCl = KCl + CrCl3 + Cl2 + H2O'
+        };
+
+        const equation = examples[exampleType];
+        if (equation) {
+            const equationInput = document.getElementById('equation-input');
+            if (equationInput) {
+                equationInput.value = equation;
+                equationInput.dispatchEvent(new Event('input'));
+            }
+            
+            // Close dropdown
+            const dropdown = e.target.closest('.dropdown');
+            if (dropdown) {
+                dropdown.classList.remove('open');
+                const btn = dropdown.querySelector('#examples-btn');
+                if (btn) btn.setAttribute('aria-expanded', 'false');
+            }
+            
+            this.announce(`Example loaded: ${equation}`);
         }
     }
 
