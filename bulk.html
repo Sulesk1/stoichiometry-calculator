@@ -106,7 +106,20 @@
   function run(){
     if(running) return;
     reset();
-    const lines = inputEl.value.split(/\r?\n/);
+    
+    // Auto-convert literal \n sequences and handle concatenated equations
+    let rawInput = inputEl.value;
+    
+    // Convert literal \n to real newlines
+    rawInput = rawInput.replace(/\\n/g, '\n');
+    
+    // If still one line but contains multiple arrows, auto-split
+    if (!/\n/.test(rawInput) && (rawInput.match(/->/g) || []).length > 1) {
+      // Split before each new equation (capital letter followed by reaction)
+      rawInput = rawInput.replace(/\s+(?=[A-Z][A-Za-z0-9()·^+\-]*[^->]*->)/g, '\n');
+    }
+    
+    const lines = rawInput.split(/\r?\n/);
     const equations = lines.filter(l=>l.trim().length>0);
     if(!equations.length){ statusEl.textContent='No equations provided'; return; }
     running = true; runBtn.disabled = true; statusEl.textContent='Starting...';
